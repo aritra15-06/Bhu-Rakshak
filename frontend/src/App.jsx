@@ -9,6 +9,7 @@ import { CitizenReportForm } from "./components/CitizenReportForm";
 import { SettingsModal } from "./components/SettingsModal";
 import { AlertToast } from "./components/AlertToast";
 import { SimulationWorkspace } from "./components/SimulationWorkspace";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 
 const TABS = [
@@ -68,7 +69,9 @@ function App() {
         {/* 2. Simulation Data: Dedicated full workspace with map + 3 regions */}
         {activeTab === "simulation" && (
           <div className="simulation-full-workspace">
-            <SimulationWorkspace />
+            <ErrorBoundary>
+              <SimulationWorkspace />
+            </ErrorBoundary>
           </div>
         )}
 

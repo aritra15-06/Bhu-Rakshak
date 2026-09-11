@@ -39,101 +39,6 @@ export function SimulationWorkspace() {
   const dateInfo = getCalendarDate(dayOfYear);
   const seasonInfo = getSeason(dayOfYear);
 
-  // Playback timer loop supporting fractional speeds below 1x
-  useEffect(() => {
-    if (isPlaying) {
-      const intervalMs = Math.max(25, Math.round(164 / playbackSpeed));
-      timerRef.current = setInterval(() => {
-        setDayOfYear((prev) => {
-          if (prev >= 365) {
-            setIsPlaying(false);
-            return 365;
-          }
-          return prev + 1;
-        });
-      }, intervalMs);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPlaying, playbackSpeed]);
-
-  function handlePlayPause() {
-    if (dayOfYear >= 365) {
-      setDayOfYear(1);
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(!isPlaying);
-    }
-  }
-
-  function handleReplay() {
-    triggeredAlertsRef.current.clear();
-    setSimAlertToast(null);
-    setDayOfYear(1);
-    setIsPlaying(true);
-  }
-
-  function handleScrub(e) {
-    setDayOfYear(parseInt(e.target.value, 10));
-  }
-
-  // Automated Alert Trigger & Emergency Toast Popup when Severity Surges
-  useEffect(() => {
-    displayedList.forEach((locId) => {
-      const r = activeSimSites[locId];
-      if (!r) return;
-
-      const isSevere =
-        r.severity_band === "CATASTROPHIC_POTENTIAL" ||
-        r.stability_state === "UNSTABLE" ||
-        (r.factor_of_safety != null && r.factor_of_safety < 1.0);
-
-      if (isSevere) {
-        // Debounce alert per seasonal crisis epoch (~30 days) to prevent firing every frame
-        const episodeKey = `${locId}_epoch_${Math.floor(dayOfYear / 30)}`;
-        if (!triggeredAlertsRef.current.has(episodeKey)) {
-          triggeredAlertsRef.current.add(episodeKey);
-
-          // 1. Trigger on-screen Notification Popup Toast
-          setSimAlertToast({
-            id: `${locId}_${Date.now()}`,
-            locationId: locId,
-            name: r.name,
-            day: dayOfYear,
-            dateString: dateInfo.dateString,
-            probability: r.probability_percent,
-            fos: r.factor_of_safety?.toFixed(2),
-            severity: r.severity_band || "CATASTROPHIC_POTENTIAL",
-            statusText: r.statusText,
-            roadBlocked: r.roadBlocked,
-          });
-
-          // 2. Automated SMS dispatch to people/observers via backend API
-          fetch("/api/alerts/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ location_id: locId, dry_run: true }),
-          }).catch((err) => {
-            console.warn("Auto simulation alert dispatch:", err);
-          });
-        }
-      }
-    });
-  }, [dayOfYear, activeSimSites, displayedList, dateInfo.dateString]);
-
-  // Auto-dismiss emergency popup toast after 8 seconds
-  useEffect(() => {
-    if (!simAlertToast) return;
-    const timer = setTimeout(() => {
-      setSimAlertToast(null);
-    }, 8000);
-    return () => clearTimeout(timer);
-  }, [simAlertToast]);
-
-
   // Active sites object passed to the map and cards
   // Fallback for auxiliary zones LOC04-06 if 6-zone view selected
   const activeSimSites = {
@@ -217,6 +122,101 @@ export function SimulationWorkspace() {
     if (r?.severity_band === "CATASTROPHIC_POTENTIAL" || r?.stability_state === "UNSTABLE") activeRedCount++;
     else if (r?.severity_band === "MAJOR" || r?.stability_state === "MARGINAL") activeAmberCount++;
   });
+
+  // Playback timer loop supporting fractional speeds below 1x
+  useEffect(() => {
+    if (isPlaying) {
+      const intervalMs = Math.max(25, Math.round(164 / playbackSpeed));
+      timerRef.current = setInterval(() => {
+        setDayOfYear((prev) => {
+          if (prev >= 365) {
+            setIsPlaying(false);
+            return 365;
+          }
+          return prev + 1;
+        });
+      }, intervalMs);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isPlaying, playbackSpeed]);
+
+  function handlePlayPause() {
+    if (dayOfYear >= 365) {
+      setDayOfYear(1);
+      setIsPlaying(true);
+    } else {
+      setIsPlaying(!isPlaying);
+    }
+  }
+
+  function handleReplay() {
+    triggeredAlertsRef.current.clear();
+    setSimAlertToast(null);
+    setDayOfYear(1);
+    setIsPlaying(true);
+  }
+
+  function handleScrub(e) {
+    setDayOfYear(parseInt(e.target.value, 10));
+  }
+
+  // Automated Alert Trigger & Emergency Toast Popup when Severity Surges
+  useEffect(() => {
+    displayedList.forEach((locId) => {
+      const r = activeSimSites[locId];
+      if (!r) return;
+
+      const isSevere =
+        r.severity_band === "CATASTROPHIC_POTENTIAL" ||
+        r.stability_state === "UNSTABLE" ||
+        (r.factor_of_safety != null && r.factor_of_safety < 1.0);
+
+      if (isSevere) {
+        // Debounce alert per seasonal crisis epoch (~30 days) to prevent firing every frame
+        const episodeKey = `${locId}_epoch_${Math.floor(dayOfYear / 30)}`;
+        if (!triggeredAlertsRef.current.has(episodeKey)) {
+          triggeredAlertsRef.current.add(episodeKey);
+
+          // 1. Trigger on-screen Notification Popup Toast
+          setSimAlertToast({
+            id: `${locId}_${Date.now()}`,
+            locationId: locId,
+            name: r.name,
+            day: dayOfYear,
+            dateString: dateInfo.dateString,
+            probability: r.probability_percent,
+            fos: r.factor_of_safety?.toFixed(2),
+            severity: r.severity_band || "CATASTROPHIC_POTENTIAL",
+            statusText: r.statusText,
+            roadBlocked: r.roadBlocked,
+          });
+
+          // 2. Automated SMS dispatch to people/observers via backend API
+          fetch("/api/alerts/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ location_id: locId, dry_run: true }),
+          }).catch((err) => {
+            console.warn("Auto simulation alert dispatch:", err);
+          });
+        }
+      }
+    });
+  }, [dayOfYear, regionFilter, dateInfo.dateString]);
+
+  // Auto-dismiss emergency popup toast after 8 seconds
+  useEffect(() => {
+    if (!simAlertToast) return;
+    const timer = setTimeout(() => {
+      setSimAlertToast(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [simAlertToast]);
+
 
   return (
     <div className="sim-workspace-layout">
