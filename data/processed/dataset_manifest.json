@@ -1,0 +1,11 @@
+{
+  "snapshot_id": "SNAP-20260909-1805",
+  "dataset_hash": "sha256:7b1f327a438ad1104a80fff342050a9d83513da0e3a6796ba6807e400e7a72f6",
+  "n_rows": 6060,
+  "n_unique_locations": 303,
+  "n_real_pilot_locations": 3,
+  "positive_rate": 0.20775577557755776,
+  "generation_seed": 42,
+  "data_provenance": "SYNTHETIC \u2014 see ml/dataset.py module docstring for full methodology and honesty notes",
+  "physics_model_version": "infinite_slope_effective_stress_v1.0"
+}

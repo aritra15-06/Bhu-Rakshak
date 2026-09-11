@@ -1,0 +1,8 @@
+{
+  "n_locations_scored": 100,
+  "elapsed_seconds": 1.9812657833099365,
+  "ms_per_location": 19.812657833099365,
+  "n_predicted_positive_at_threshold": 24,
+  "decision_threshold": 0.5,
+  "note": "Simulated locations with randomly sampled terrain/soil parameters, scored through the single deployed model instance to demonstrate the shared-model scaling mechanism. Not real NER site data."
+}

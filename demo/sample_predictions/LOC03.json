@@ -1,0 +1,80 @@
+{
+  "schema_version": "4.0.0",
+  "prediction_id": "BR-LOC03-2026-09-11T12:49:02.711856+00:00",
+  "model": {
+    "algorithm": "XGBoostClassifier",
+    "model_version": "xgb_landslide_v1.0",
+    "feature_schema_version": "4.0.0",
+    "physics_model_version": "infinite_slope_effective_stress_v1.0",
+    "decision_threshold": 0.5
+  },
+  "location": {
+    "location_id": "LOC03",
+    "latitude": 27.69,
+    "longitude": 88.745
+  },
+  "analysis_time_utc": "2026-09-11T12:49:02.711856+00:00",
+  "forecast_horizon_hours": 24,
+  "ml_output": {
+    "raw_margin": 0.3118,
+    "positive_class_probability_raw": 0.5773,
+    "class_probabilities": {
+      "0": 0.4227,
+      "1": 0.5773
+    },
+    "predicted_class": 0,
+    "calibrated_probability": 0.239
+  },
+  "physics_output": {
+    "physics_status": "AVAILABLE",
+    "physics_model_version": "infinite_slope_effective_stress_v1.0",
+    "infiltration_rate_mm_h": 15.4504,
+    "cumulative_infiltration_mm": 996.0248,
+    "wetting_front_depth_m": 3.0073,
+    "effective_saturation_0_1": 1.0,
+    "pore_pressure_kpa": 9.3195,
+    "pore_pressure_status": "ESTIMATED",
+    "effective_normal_stress_kpa": 19.34,
+    "driving_shear_stress_kpa": 14.6028,
+    "resisting_shear_strength_kpa": 20.6207,
+    "factor_of_safety": 1.4121,
+    "stability_state": "MARGINAL",
+    "physics_validity_flags": []
+  },
+  "data_quality": {
+    "overall_status": "PASS",
+    "completeness_0_1": 1.0,
+    "spatial_alignment_0_1": 0.95,
+    "temporal_alignment_0_1": 1.0,
+    "source_reliability_0_1": 0.9
+  },
+  "traceability": {
+    "input_snapshot_id": "SNAP-20260911T124902.711856+0000-LOC03",
+    "feature_vector_hash": "sha256:ea584122753f2c1e4d186c229d21f286dac41bddf722d71fc96518704ea51205",
+    "prediction_service_version": "1.0.0"
+  },
+  "optional_explainability": {
+    "feature_contributions": [
+      {
+        "feature": "factor_of_safety",
+        "contribution": -0.1475
+      },
+      {
+        "feature": "rainfall_1h_mm",
+        "contribution": 0.1272
+      },
+      {
+        "feature": "rainfall_72h_mm",
+        "contribution": 0.0985
+      },
+      {
+        "feature": "rainfall_7d_mm",
+        "contribution": 0.047
+      },
+      {
+        "feature": "effective_saturation_0_1",
+        "contribution": 0.0312
+      }
+    ]
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "note": "Road centerline seed vector data for Sikkim GIS impact engine. Polylines represent major national highways, state highways, and strategic transit corridors across North and East Sikkim.",
+  "roads": [
+    {
+      "id": "r1",
+      "name": "North Sikkim Highway (Mangan-Chungthang NH-10)",
+      "road_class": "national_highway",
+      "coordinates": [
+        [88.5260, 27.5080],
+        [88.5350, 27.5180],
+        [88.5480, 27.5330],
+        [88.5600, 27.5390],
+        [88.5720, 27.5450],
+        [88.5880, 27.5550],
+        [88.6010, 27.5620],
+        [88.6120, 27.5680],
+        [88.6250, 27.5790],
+        [88.6320, 27.5850],
+        [88.6440, 27.5960],
+        [88.6475, 27.5985],
+        [88.6510, 27.6020]
+      ]
+    },
+    {
+      "id": "r2",
+      "name": "Mangan-Dikchu Highway Corridor",
+      "road_class": "state_highway",
+      "coordinates": [
+        [88.5260, 27.5080],
+        [88.5290, 27.5095],
+        [88.5340, 27.5120],
+        [88.5380, 27.5050],
+        [88.5450, 27.4900],
+        [88.5550, 27.4700],
+        [88.5700, 27.4400],
+        [88.5800, 27.4200]
+      ]
+    },
+    {
+      "id": "r3",
+      "name": "Lachung Valley Highway (SH-2)",
+      "road_class": "state_highway",
+      "coordinates": [
+        [88.6510, 27.6020],
+        [88.6650, 27.6140],
+        [88.6780, 27.6250],
+        [88.6920, 27.6400],
+        [88.7050, 27.6520],
+        [88.7180, 27.6650],
+        [88.7280, 27.6750],
+        [88.7380, 27.6830],
+        [88.7480, 27.6920],
+        [88.7650, 27.7080],
+        [88.7850, 27.7250]
+      ]
+    },
+    {
+      "id": "r4",
+      "name": "Chungthang-Lachen Highway (SH-3)",
+      "road_class": "state_highway",
+      "coordinates": [
+        [88.6510, 27.6020],
+        [88.6420, 27.6100],
+        [88.6350, 27.6180],
+        [88.6250, 27.6230],
+        [88.6130, 27.6280],
+        [88.6010, 27.6400],
+        [88.5850, 27.6650],
+        [88.5720, 27.6850],
+        [88.5600, 27.7050],
+        [88.5500, 27.7200]
+      ]
+    },
+    {
+      "id": "r5",
+      "name": "Teesta Valley Highway (Rangpo-Singtam NH-10)",
+      "road_class": "national_highway",
+      "coordinates": [
+        [88.5330, 27.1730],
+        [88.5250, 27.1850],
+        [88.5120, 27.2000],
+        [88.4980, 27.2340],
+        [88.5200, 27.2550],
+        [88.5500, 27.2700],
+        [88.5850, 27.2800]
+      ]
+    },
+    {
+      "id": "r6",
+      "name": "Gangtok-Nathula Highway (JN Road)",
+      "road_class": "national_highway",
+      "coordinates": [
+        [88.6065, 27.3389],
+        [88.6200, 27.3480],
+        [88.6350, 27.3600],
+        [88.6500, 27.3720],
+        [88.6630, 27.3830],
+        [88.6750, 27.3800],
+        [88.6850, 27.3750]
+      ]
+    },
+    {
+      "id": "r7",
+      "name": "Ranipool-Gangtok Expressway Link",
+      "road_class": "national_highway",
+      "coordinates": [
+        [88.5850, 27.2800],
+        [88.5920, 27.3000],
+        [88.6010, 27.3200],
+        [88.6065, 27.3389]
+      ]
+    }
+  ]
+}

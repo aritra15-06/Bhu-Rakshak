@@ -1,0 +1,301 @@
+{
+  "feature_schema_version": "4.0.0",
+  "features": [
+    {
+      "name": "rainfall_1h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum of rainfall in the 1h ending at analysis_time_utc",
+      "missing_value_policy": "0.0 if missing window, flag data_quality",
+      "leakage_rule": "only rainfall at-or-before analysis_time_utc"
+    },
+    {
+      "name": "rainfall_3h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum, 3h window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_6h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum, 6h window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_12h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum, 12h window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_24h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum, 24h window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_72h_mm",
+      "unit": "mm",
+      "source": "GPM_IMERG_or_synthetic",
+      "calculation": "sum, 72h window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_7d_mm",
+      "unit": "mm",
+      "source": "CHIRPS_or_synthetic",
+      "calculation": "sum, 7-day window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "rainfall_30d_mm",
+      "unit": "mm",
+      "source": "CHIRPS_or_synthetic",
+      "calculation": "sum, 30-day window",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "elevation_m",
+      "unit": "m",
+      "source": "SRTM_Copernicus_DEM_or_synthetic",
+      "calculation": "DEM sample at cell centroid",
+      "missing_value_policy": "impute cell-median; flag",
+      "leakage_rule": "static, no leakage risk"
+    },
+    {
+      "name": "slope_deg",
+      "unit": "degrees",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "slope from DEM",
+      "missing_value_policy": "impute cell-median; flag",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "aspect_sin",
+      "unit": "unitless [-1,1]",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "sin(aspect_deg)",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "aspect_cos",
+      "unit": "unitless [-1,1]",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "cos(aspect_deg)",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "plan_curvature",
+      "unit": "1/m",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "plan curvature from DEM",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "profile_curvature",
+      "unit": "1/m",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "profile curvature from DEM",
+      "missing_value_policy": "0.0 if missing",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "flow_accumulation_m2",
+      "unit": "m^2",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "upslope contributing area",
+      "missing_value_policy": "impute cell-median",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "distance_to_stream_m",
+      "unit": "m",
+      "source": "DEM_derivative_or_synthetic",
+      "calculation": "distance to nearest stream",
+      "missing_value_policy": "impute cell-median",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "clay_percent",
+      "unit": "%",
+      "source": "SoilGrids_or_synthetic",
+      "calculation": "SoilGrids depth-interval sample",
+      "missing_value_policy": "impute regional-median; flag",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "sand_percent",
+      "unit": "%",
+      "source": "SoilGrids_or_synthetic",
+      "calculation": "SoilGrids depth-interval sample",
+      "missing_value_policy": "impute regional-median; flag",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "silt_percent",
+      "unit": "%",
+      "source": "SoilGrids_or_synthetic",
+      "calculation": "SoilGrids depth-interval sample",
+      "missing_value_policy": "impute regional-median; flag",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "bulk_density_kg_m3",
+      "unit": "kg/m^3",
+      "source": "SoilGrids_or_synthetic",
+      "calculation": "SoilGrids depth-interval sample",
+      "missing_value_policy": "impute regional-median; flag",
+      "leakage_rule": "static"
+    },
+    {
+      "name": "ndvi_summary",
+      "unit": "unitless [-1,1]",
+      "source": "satellite_or_synthetic",
+      "calculation": "recent NDVI composite",
+      "missing_value_policy": "impute regional-median; flag",
+      "leakage_rule": "static/slow-changing"
+    },
+    {
+      "name": "nearest_historical_landslide_distance_m",
+      "unit": "m",
+      "source": "NRSC_ISRO_Atlas_or_synthetic",
+      "calculation": "distance to nearest pre-analysis_time historical event",
+      "missing_value_policy": "large sentinel value (999999) if none known",
+      "leakage_rule": "only events with event_time < analysis_time_utc"
+    },
+    {
+      "name": "historical_landslide_count_1km_5y",
+      "unit": "count",
+      "source": "NRSC_ISRO_Atlas_or_synthetic",
+      "calculation": "count of events within 1km, prior 5y",
+      "missing_value_policy": "0 if none",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "historical_landslide_count_5km_5y",
+      "unit": "count",
+      "source": "NRSC_ISRO_Atlas_or_synthetic",
+      "calculation": "count of events within 5km, prior 5y",
+      "missing_value_policy": "0 if none",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "factor_of_safety",
+      "unit": "dimensionless",
+      "source": "physics_engine",
+      "calculation": "infinite_slope_effective_stress_v1.0 output",
+      "missing_value_policy": "drop row if physics_status==UNAVAILABLE",
+      "leakage_rule": "recomputed at analysis_time_utc using only rainfall at-or-before that time"
+    },
+    {
+      "name": "pore_pressure_kpa",
+      "unit": "kPa",
+      "source": "physics_engine",
+      "calculation": "physics_engine output",
+      "missing_value_policy": "drop row if physics_status==UNAVAILABLE",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "effective_saturation_0_1",
+      "unit": "0-1",
+      "source": "physics_engine",
+      "calculation": "physics_engine output",
+      "missing_value_policy": "drop row if physics_status==UNAVAILABLE",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "infiltration_rate_mm_h",
+      "unit": "mm/h",
+      "source": "physics_engine",
+      "calculation": "physics_engine output",
+      "missing_value_policy": "drop row if physics_status==UNAVAILABLE",
+      "leakage_rule": "same"
+    },
+    {
+      "name": "cumulative_infiltration_mm",
+      "unit": "mm",
+      "source": "physics_engine",
+      "calculation": "physics_engine output",
+      "missing_value_policy": "drop row if physics_status==UNAVAILABLE",
+      "leakage_rule": "same"
+    }
+  ],
+  "environmental_only_features": [
+    "rainfall_1h_mm",
+    "rainfall_3h_mm",
+    "rainfall_6h_mm",
+    "rainfall_12h_mm",
+    "rainfall_24h_mm",
+    "rainfall_72h_mm",
+    "rainfall_7d_mm",
+    "rainfall_30d_mm",
+    "elevation_m",
+    "slope_deg",
+    "aspect_sin",
+    "aspect_cos",
+    "plan_curvature",
+    "profile_curvature",
+    "flow_accumulation_m2",
+    "distance_to_stream_m",
+    "clay_percent",
+    "sand_percent",
+    "silt_percent",
+    "bulk_density_kg_m3",
+    "ndvi_summary",
+    "nearest_historical_landslide_distance_m",
+    "historical_landslide_count_1km_5y",
+    "historical_landslide_count_5km_5y"
+  ],
+  "physics_features": [
+    "factor_of_safety",
+    "pore_pressure_kpa",
+    "effective_saturation_0_1",
+    "infiltration_rate_mm_h",
+    "cumulative_infiltration_mm"
+  ],
+  "chosen_feature_set_for_deployed_model": [
+    "rainfall_1h_mm",
+    "rainfall_3h_mm",
+    "rainfall_6h_mm",
+    "rainfall_12h_mm",
+    "rainfall_24h_mm",
+    "rainfall_72h_mm",
+    "rainfall_7d_mm",
+    "rainfall_30d_mm",
+    "elevation_m",
+    "slope_deg",
+    "aspect_sin",
+    "aspect_cos",
+    "plan_curvature",
+    "profile_curvature",
+    "flow_accumulation_m2",
+    "distance_to_stream_m",
+    "clay_percent",
+    "sand_percent",
+    "silt_percent",
+    "bulk_density_kg_m3",
+    "ndvi_summary",
+    "nearest_historical_landslide_distance_m",
+    "historical_landslide_count_1km_5y",
+    "historical_landslide_count_5km_5y",
+    "factor_of_safety",
+    "pore_pressure_kpa",
+    "effective_saturation_0_1",
+    "infiltration_rate_mm_h",
+    "cumulative_infiltration_mm"
+  ]
+}

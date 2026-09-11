@@ -1,0 +1,130 @@
+{
+  "model_version": "xgb_landslide_v1.0",
+  "feature_schema_version": "4.0.0",
+  "physics_model_version": "infinite_slope_effective_stress_v1.0",
+  "training_snapshot_id": "SNAP-20260911-123356",
+  "dataset_hash": "sha256:c07c3a57216b4097d3ca30d5bc1c7af498cf56a7dc31b0b8cfef75e7884c187c",
+  "decision_threshold": 0.5,
+  "selected_model": "B_environmental_plus_physics",
+  "chosen_feature_set": [
+    "rainfall_1h_mm",
+    "rainfall_3h_mm",
+    "rainfall_6h_mm",
+    "rainfall_12h_mm",
+    "rainfall_24h_mm",
+    "rainfall_72h_mm",
+    "rainfall_7d_mm",
+    "rainfall_30d_mm",
+    "elevation_m",
+    "slope_deg",
+    "aspect_sin",
+    "aspect_cos",
+    "plan_curvature",
+    "profile_curvature",
+    "flow_accumulation_m2",
+    "distance_to_stream_m",
+    "clay_percent",
+    "sand_percent",
+    "silt_percent",
+    "bulk_density_kg_m3",
+    "ndvi_summary",
+    "nearest_historical_landslide_distance_m",
+    "historical_landslide_count_1km_5y",
+    "historical_landslide_count_5km_5y",
+    "factor_of_safety",
+    "pore_pressure_kpa",
+    "effective_saturation_0_1",
+    "infiltration_rate_mm_h",
+    "cumulative_infiltration_mm"
+  ],
+  "comparison_A_environmental_only": {
+    "label": "A_environmental_only",
+    "n_test_rows": 1200,
+    "positive_rate_test": 0.2775,
+    "pr_auc": 0.5729632343632138,
+    "roc_auc": 0.786902819774792,
+    "recall_at_0.5": 0.5465465465465466,
+    "precision_at_0.5": 0.5069637883008357,
+    "f1_at_0.5": 0.5260115606936416,
+    "log_loss": 0.5736695528030396,
+    "brier_score": 0.1928349733352661,
+    "confusion_matrix_at_0.5": {
+      "labels": [
+        0,
+        1
+      ],
+      "matrix": [
+        [
+          690,
+          177
+        ],
+        [
+          151,
+          182
+        ]
+      ]
+    },
+    "cv_pr_auc_dev": 0.4760015946657245,
+    "best_params": {
+      "colsample_bytree": 1.0,
+      "learning_rate": 0.05,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "n_estimators": 200,
+      "reg_lambda": 1,
+      "subsample": 0.85
+    },
+    "best_iteration": 10,
+    "scale_pos_weight": 3.871287128712871
+  },
+  "comparison_B_environmental_plus_physics": {
+    "label": "B_environmental_plus_physics",
+    "n_test_rows": 1200,
+    "positive_rate_test": 0.2775,
+    "pr_auc": 0.7942133107961352,
+    "roc_auc": 0.923788840743858,
+    "recall_at_0.5": 0.93993993993994,
+    "precision_at_0.5": 0.563963963963964,
+    "f1_at_0.5": 0.704954954954955,
+    "log_loss": 0.3999677896499634,
+    "brier_score": 0.13175122439861298,
+    "confusion_matrix_at_0.5": {
+      "labels": [
+        0,
+        1
+      ],
+      "matrix": [
+        [
+          625,
+          242
+        ],
+        [
+          20,
+          313
+        ]
+      ]
+    },
+    "cv_pr_auc_dev": 0.7623154681952876,
+    "best_params": {
+      "colsample_bytree": 1.0,
+      "learning_rate": 0.05,
+      "max_depth": 2,
+      "min_child_weight": 1,
+      "n_estimators": 200,
+      "reg_lambda": 5,
+      "subsample": 1.0
+    },
+    "best_iteration": 55,
+    "scale_pos_weight": 3.871287128712871
+  },
+  "post_calibration": {
+    "calibrated_pr_auc_test": 0.7942133107961352,
+    "calibrated_roc_auc_test": 0.923788840743858,
+    "calibrated_log_loss_test": 0.3215014068095159,
+    "calibrated_brier_score_test": 0.10260852558636334,
+    "calibration_method": "sigmoid",
+    "calibration_split_n": 720
+  },
+  "IMPORTANT_data_provenance_notice": "Trained and evaluated on a SYNTHETIC dataset (see ml/dataset.py docstring). PR-AUC/ROC-AUC/recall/precision here measure whether the model learned the documented synthetic labeling function (FoS + rainfall + historical density -> logistic probability), NOT validated real-world landslide prediction skill. Do not present these numbers as field-validated accuracy in the pitch.",
+  "trained_at_utc": "2026-09-11T12:47:34.357807+00:00"
+}

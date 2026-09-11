@@ -1,0 +1,27 @@
+{
+  "note": "Settlement seed data for Sikkim GIS impact engine. Locations represent actual North/East Sikkim towns and villages with verified geographic coordinates and population estimates.",
+  "villages": [
+    {"id": "v1", "name": "Chungthang Town", "population": 1800, "latitude": 27.6020, "longitude": 88.6510, "district": "North Sikkim", "elevation_m": 1790},
+    {"id": "v2", "name": "Bop Village", "population": 420, "latitude": 27.5960, "longitude": 88.6440, "district": "North Sikkim", "elevation_m": 1750},
+    {"id": "v3", "name": "Dikchu Settlement", "population": 950, "latitude": 27.5120, "longitude": 88.5340, "district": "North Sikkim", "elevation_m": 1200},
+    {"id": "v4", "name": "Mangan Bazaar", "population": 3200, "latitude": 27.5080, "longitude": 88.5260, "district": "North Sikkim", "elevation_m": 1420},
+    {"id": "v5", "name": "Lachung Village", "population": 1100, "latitude": 27.6920, "longitude": 88.7480, "district": "North Sikkim", "elevation_m": 2700},
+    {"id": "v6", "name": "Lachen Town", "population": 850, "latitude": 27.7200, "longitude": 88.5500, "district": "North Sikkim", "elevation_m": 2750},
+    {"id": "v7", "name": "Lachen Road Camp", "population": 300, "latitude": 27.6280, "longitude": 88.6130, "district": "North Sikkim", "elevation_m": 2100},
+    {"id": "v8", "name": "Rangpo Township", "population": 4500, "latitude": 27.1730, "longitude": 88.5330, "district": "East Sikkim", "elevation_m": 300},
+    {"id": "v9", "name": "Singtam Market", "population": 5800, "latitude": 27.2340, "longitude": 88.4980, "district": "East Sikkim", "elevation_m": 350},
+    {"id": "v10", "name": "Gangtok Capital Hub", "population": 100000, "latitude": 27.3389, "longitude": 88.6065, "district": "East Sikkim", "elevation_m": 1650},
+    {"id": "v11", "name": "Nathula Checkpost", "population": 150, "latitude": 27.3830, "longitude": 88.6630, "district": "East Sikkim", "elevation_m": 4310},
+    {"id": "v12", "name": "Singhik Viewpoint Village", "population": 650, "latitude": 27.5330, "longitude": 88.5480, "district": "North Sikkim", "elevation_m": 1560},
+    {"id": "v13", "name": "Toong Settlement", "population": 480, "latitude": 27.5450, "longitude": 88.5720, "district": "North Sikkim", "elevation_m": 1480},
+    {"id": "v14", "name": "Naga Village", "population": 540, "latitude": 27.5680, "longitude": 88.6120, "district": "North Sikkim", "elevation_m": 1600},
+    {"id": "v15", "name": "Pegong Settlement", "population": 280, "latitude": 27.6180, "longitude": 88.6350, "district": "North Sikkim", "elevation_m": 1850},
+    {"id": "v16", "name": "Khedum Village", "population": 350, "latitude": 27.6250, "longitude": 88.6780, "district": "North Sikkim", "elevation_m": 1980},
+    {"id": "v17", "name": "Munshithang Valley Stop", "population": 210, "latitude": 27.6650, "longitude": 88.5850, "district": "North Sikkim", "elevation_m": 2350},
+    {"id": "v18", "name": "Phodong Monastery Town", "population": 1200, "latitude": 27.4200, "longitude": 88.5800, "district": "North Sikkim", "elevation_m": 1600},
+    {"id": "v19", "name": "Kabi Tintibi Historic Post", "population": 780, "latitude": 27.4000, "longitude": 88.6100, "district": "North Sikkim", "elevation_m": 1650},
+    {"id": "v20", "name": "Ranipool Hub", "population": 8500, "latitude": 27.2800, "longitude": 88.5850, "district": "East Sikkim", "elevation_m": 900},
+    {"id": "v21", "name": "Sherathang Border Mart", "population": 320, "latitude": 27.3750, "longitude": 88.6850, "district": "East Sikkim", "elevation_m": 3780},
+    {"id": "v22", "name": "Katao Alpine Base", "population": 160, "latitude": 27.7250, "longitude": 88.7850, "district": "North Sikkim", "elevation_m": 3200}
+  ]
+}
