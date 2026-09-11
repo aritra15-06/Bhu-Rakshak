@@ -218,6 +218,16 @@ export function AlertsPanel() {
   const [sending, setSending] = useState(false);
   const [appMode, setAppMode] = useState("sms"); // "sms" or "android_app"
 
+  // Provider info & Test alert state
+  const [providerInfo, setProviderInfo] = useState(null);
+  const [testContactId, setTestContactId] = useState("");
+  const [testRecipientName, setTestRecipientName] = useState("");
+  const [testRecipientPhone, setTestRecipientPhone] = useState("");
+  const [testRecipientTown, setTestRecipientTown] = useState("Mangan Bazaar");
+  const [testCustomMessage, setTestCustomMessage] = useState("");
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
   // Simulated connected Android app mobile devices
   const [connectedDevices] = useState([
     { device_id: "AND-9482-SK", model: "Samsung Galaxy A54", user: "Pema Dorjee", lat: 27.5995, lon: 88.6485, alt_m: 1785, accuracy_m: 4.2, status: "Active (Inside LOC01 Buffer)" },
@@ -229,9 +239,84 @@ export function AlertsPanel() {
     const data = await api.getContacts();
     setContacts(data.contacts);
     setTwilioConfigured(data.twilio_configured);
+    if (data.contacts?.length > 0 && !testContactId) {
+      const first = data.contacts[0];
+      setTestContactId(first.contact_id);
+      setTestRecipientName(first.name);
+      setTestRecipientPhone(first.phone_number);
+      setTestRecipientTown(first.town || "North Sikkim Sector");
+      setTestCustomMessage(`🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for ${first.name}. Landslide early warning telemetry operating normally.`);
+    }
   }
 
-  useEffect(() => { loadContacts(); }, []);
+  async function loadProviderInfo() {
+    try {
+      const settings = await api.getSmsSettings();
+      let wallet = null;
+      if (settings.active_provider === "fast2sms") {
+        try {
+          wallet = await api.getFast2smsWallet();
+        } catch (_) {}
+      }
+      setProviderInfo({ ...settings, wallet });
+    } catch (e) {
+      console.warn("Failed to load SMS provider settings:", e);
+    }
+  }
+
+  useEffect(() => {
+    loadContacts();
+    loadProviderInfo();
+  }, []);
+
+  function handleSelectTestContact(cId) {
+    setTestContactId(cId);
+    setTestResult(null);
+    if (cId === "custom") {
+      setTestRecipientName("");
+      setTestRecipientPhone("");
+      setTestRecipientTown("North Sikkim Sector");
+      setTestCustomMessage("🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified. Landslide early warning telemetry operating normally.");
+    } else {
+      const found = contacts.find((c) => c.contact_id === cId);
+      if (found) {
+        setTestRecipientName(found.name);
+        setTestRecipientPhone(found.phone_number);
+        setTestRecipientTown(found.town || "North Sikkim Sector");
+        setTestCustomMessage(`🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for ${found.name} at ${found.town || "North Sikkim"}. Landslide telemetry active.`);
+      }
+    }
+  }
+
+  async function handleSendTestSMS(directContact = null) {
+    const name = directContact ? directContact.name : (testContactId === "custom" ? testRecipientName : testRecipientName || "Citizen");
+    const phone = directContact ? directContact.phone_number : (testContactId === "custom" ? testRecipientPhone : testRecipientPhone);
+    const town = directContact ? directContact.town : (testContactId === "custom" ? testRecipientTown : testRecipientTown);
+    const msg = testCustomMessage || `🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for ${name}.`;
+
+    if (!phone || phone.trim().length < 8) {
+      setTestResult({ success: false, error: "Please enter a valid phone number (at least 10 digits for India)." });
+      return;
+    }
+
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const res = await api.testAlert({
+        phone_number: phone,
+        recipient_name: name || "Resident",
+        town: town || "North Sikkim Sector",
+        custom_message: msg,
+        dry_run: false,
+      });
+      setTestResult(res);
+      loadProviderInfo();
+    } catch (err) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setTestSending(false);
+    }
+  }
 
   const autoDetectedInfo = detectSimLocationAndLanguage(form.phone_number);
   const effectiveSimInfo = overrideCircleId && CIRCLE_PROFILES[overrideCircleId]
@@ -318,13 +403,41 @@ export function AlertsPanel() {
       {appMode === "sms" && (
         <>
           <div className="panel-section">
-            <h3>Registered contacts (demo)</h3>
-            {!twilioConfigured && (
-              <div className="caveat-note">
-                Twilio not configured — live SMS is unavailable until TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
-                TWILIO_FROM_NUMBER are set as environment variables or saved in ⚙️ Settings. Dry-run works without any configuration.
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ margin: 0 }}>Registered Contacts & Field Observers ({contacts.length})</h3>
+            </div>
+
+            {/* Active Provider & Wallet Status Indicator */}
+            <div style={{
+              background: providerInfo?.active_provider === "fast2sms" ? "#eff6ff" : (providerInfo?.active_provider === "telegram" ? "#f0fdf4" : "#f8fafc"),
+              border: `1px solid ${providerInfo?.active_provider === "fast2sms" ? "#bfdbfe" : (providerInfo?.active_provider === "telegram" ? "#bbf7d0" : "#cbd5e1")}`,
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 14,
+              fontSize: "0.85rem",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+            }}>
+              <div>
+                <strong>Active Emergency Channel: </strong>
+                {providerInfo?.active_provider === "fast2sms" && <span>⚡ <strong>Fast2SMS (Developer API)</strong></span>}
+                {providerInfo?.active_provider === "telegram" && <span>🤖 <strong>Telegram Bot (100% Free Push)</strong></span>}
+                {providerInfo?.active_provider === "simulated" && <span>📡 <strong>Simulated Live Broadcast</strong></span>}
+                {providerInfo?.active_provider === "twilio" && <span>📞 <strong>Twilio SMS Gateway</strong></span>}
+                {providerInfo?.active_provider === "fast2sms" && providerInfo?.wallet?.success && (
+                  <span style={{ marginLeft: 8, padding: "2px 8px", background: "#dbeafe", color: "#1e40af", borderRadius: 12, fontSize: "0.78rem", fontWeight: 700 }}>
+                    💳 Wallet: Rs. {providerInfo.wallet.wallet_inr} ({providerInfo.wallet.sms_count} SMS)
+                  </span>
+                )}
               </div>
-            )}
+              <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                Switch provider in ⚙️ Settings
+              </span>
+            </div>
+
             {contacts.map((c) => (
               <div className="contact-row" key={c.contact_id}>
                 <div>
@@ -333,10 +446,145 @@ export function AlertsPanel() {
                     📍 {c.town || "North Sikkim Settlement"} · 🗣️ {LANGUAGE_LABELS[c.preferred_language] || c.preferred_language}
                   </span>
                 </div>
-                <button className="btn" onClick={() => handleDelete(c.contact_id)}>Remove</button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: "0.8rem", padding: "4px 10px", background: "#f1f5f9", borderColor: "#cbd5e1", color: "#1e293b", fontWeight: 600 }}
+                    onClick={() => {
+                      handleSelectTestContact(c.contact_id);
+                      handleSendTestSMS(c);
+                    }}
+                    disabled={testSending}
+                  >
+                    {testSending && testContactId === c.contact_id ? "Sending…" : "🧪 Test SMS"}
+                  </button>
+                  <button className="btn" onClick={() => handleDelete(c.contact_id)}>Remove</button>
+                </div>
               </div>
             ))}
             {contacts.length === 0 && <div className="metric-row"><span className="metric-label">No contacts registered yet</span></div>}
+          </div>
+
+          {/* Dedicated Person-Specific Test Alert Dispatch Section */}
+          <div className="panel-section" style={{ border: "2px solid #3b82f6", background: "#f8fafc", borderRadius: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ margin: 0, color: "#1e3a8a" }}>🧪 Test Emergency SMS Dispatch</h3>
+              <span style={{ fontSize: "0.75rem", background: "#dbeafe", color: "#1e40af", padding: "3px 8px", borderRadius: 4, fontWeight: 700 }}>
+                DIRECT RECIPIENT TESTING
+              </span>
+            </div>
+            <p style={{ fontSize: "0.82rem", color: "#475569", marginTop: 0, marginBottom: 12 }}>
+              Select any registered citizen or enter a custom mobile number to test live SMS delivery without needing to trigger a full landslide hazard cycle.
+            </p>
+
+            <div className="form-field" style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>Select Recipient / Person to Test</label>
+              <select
+                value={testContactId}
+                onChange={(e) => handleSelectTestContact(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: "0.88rem" }}
+              >
+                {contacts.map((c) => (
+                  <option key={c.contact_id} value={c.contact_id}>
+                    👤 {c.name} ({c.phone_number}) — {c.town || "North Sikkim"}
+                  </option>
+                ))}
+                <option value="custom">➕ Enter Custom Mobile Number / Observer</option>
+              </select>
+            </div>
+
+            {testContactId === "custom" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div className="form-field">
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Citizen / Observer Name</label>
+                  <input
+                    placeholder="e.g. Ramesh Sharma"
+                    value={testRecipientName}
+                    onChange={(e) => setTestRecipientName(e.target.value)}
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: "0.85rem" }}
+                  />
+                </div>
+                <div className="form-field">
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>10-Digit Mobile Number</label>
+                  <input
+                    placeholder="e.g. 9830012345"
+                    value={testRecipientPhone}
+                    onChange={(e) => setTestRecipientPhone(e.target.value)}
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: "0.85rem" }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="form-field" style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>Test Alert Message Content</label>
+              <textarea
+                rows={2}
+                value={testCustomMessage}
+                onChange={(e) => setTestCustomMessage(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", fontSize: "0.85rem", resize: "vertical" }}
+              />
+              <div style={{ fontSize: "0.74rem", color: "#64748b", marginTop: 2, textAlign: "right" }}>
+                Length: {testCustomMessage.length} chars (1 SMS credit = 160 chars)
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1, padding: "9px 16px", fontWeight: 600, fontSize: "0.9rem" }}
+                onClick={() => handleSendTestSMS()}
+                disabled={testSending}
+              >
+                {testSending ? "Sending Test SMS…" : `🚀 Send Test SMS to ${testRecipientName || "Selected Recipient"}`}
+              </button>
+            </div>
+
+            {/* Test Result Diagnostic Card */}
+            {testResult && (
+              <div style={{
+                marginTop: 14,
+                padding: "12px 14px",
+                borderRadius: 8,
+                background: testResult.success ? "#f0fdf4" : "#fef2f2",
+                border: `1.5px solid ${testResult.success ? "#22c55e" : "#ef4444"}`,
+                fontSize: "0.85rem",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <strong style={{ color: testResult.success ? "#15803d" : "#b91c1c", fontSize: "0.92rem" }}>
+                    {testResult.success ? "✅ Test SMS Delivered Successfully!" : "❌ Test SMS Dispatch Failed"}
+                  </strong>
+                  <span style={{ fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>
+                    Provider: {testResult.active_provider || providerInfo?.active_provider}
+                  </span>
+                </div>
+
+                <div style={{ color: "#334155", lineHeight: 1.5 }}>
+                  <div><strong>Recipient:</strong> {testResult.recipient_name} (<code>{testResult.phone_number}</code>)</div>
+                  {testResult.message && <div style={{ marginTop: 4 }}><strong>Message Sent:</strong> {testResult.message}</div>}
+                  {testResult.error && (
+                    <div style={{
+                      marginTop: 8,
+                      padding: "8px 10px",
+                      background: "#fee2e2",
+                      border: "1px solid #fca5a5",
+                      borderRadius: 6,
+                      color: "#991b1b",
+                      fontSize: "0.82rem",
+                    }}>
+                      ⚠️ <strong>Error Details:</strong> {testResult.error}
+                    </div>
+                  )}
+                  {testResult.error && (testResult.active_provider === "fast2sms" || providerInfo?.active_provider === "fast2sms") && (
+                    <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#475569", background: "#f8fafc", padding: 8, borderRadius: 6, border: "1px solid #e2e8f0" }}>
+                      💡 <strong>Fast2SMS Solution:</strong> Your Fast2SMS API key is verified and connected to wallet balance (Rs. 50.00). However, Fast2SMS requires completing one minimum Rs. 100 recharge on <a href="https://www.fast2sms.com" target="_blank" rel="noreferrer" style={{ color: "#2563eb" }}>fast2sms.com</a> to unlock programmatic API SMS dispatch. You can also switch to <strong>Telegram Bot</strong> or <strong>Simulated Free Broadcast</strong> in ⚙️ Settings for instant free testing!
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="panel-section">

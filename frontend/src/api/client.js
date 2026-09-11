@@ -36,4 +36,9 @@ export const api = {
   saveSmsSettings: (settings) => request("/settings/sms", { method: "POST", body: JSON.stringify(settings) }),
   testTelegram: (botToken, chatId) =>
     request("/settings/test-telegram", { method: "POST", body: JSON.stringify({ bot_token: botToken, chat_id: chatId }) }),
+  testFast2sms: (apiKey = "", phoneNumber = "") =>
+    request("/settings/test-fast2sms", { method: "POST", body: JSON.stringify({ api_key: apiKey, phone_number: phoneNumber }) }),
+  getFast2smsWallet: () => request("/settings/fast2sms-wallet"),
+  testAlert: (payload) => request("/alerts/test", { method: "POST", body: JSON.stringify(payload) }),
 };
+

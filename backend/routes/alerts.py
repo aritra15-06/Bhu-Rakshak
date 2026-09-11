@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -94,3 +95,44 @@ def send_alerts(body: AlertSendRequest, request: Request):
         dry_run=body.dry_run,
     )
     return alert_result
+
+
+class SingleTestAlertRequest(BaseModel):
+    phone_number: str
+    recipient_name: Optional[str] = "Citizen"
+    town: Optional[str] = "North Sikkim Sector"
+    custom_message: Optional[str] = None
+    dry_run: bool = False
+
+
+@router.post("/alerts/test")
+def test_alert_to_recipient(body: SingleTestAlertRequest):
+    """
+    Sends a test emergency warning SMS to a specific recipient using
+    the active alert provider (Fast2SMS, Telegram, Twilio, or Simulated).
+    """
+    from alerts.sms_sender import send_sms
+    from alerts.free_alert_dispatcher import load_free_alert_settings
+
+    free_settings = load_free_alert_settings()
+    active_prov = free_settings.get("active_provider", "telegram")
+
+    msg = body.custom_message or (
+        f"🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for {body.recipient_name} at {body.town}. "
+        "Landslide early warning telemetry operating normally."
+    )
+
+    result = send_sms(to_number=body.phone_number, message=msg, dry_run=body.dry_run)
+
+    return {
+        "success": bool(result.get("sent", False)),
+        "recipient_name": body.recipient_name,
+        "phone_number": body.phone_number,
+        "town": body.town,
+        "active_provider": active_prov,
+        "message": msg,
+        "dry_run": body.dry_run,
+        "result": result,
+        "error": result.get("error"),
+    }
+

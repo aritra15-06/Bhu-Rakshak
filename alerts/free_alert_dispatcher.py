@@ -71,41 +71,129 @@ def send_telegram_alert(token: str, chat_id: str, message: str) -> Dict[str, Any
         return {"success": False, "provider": "telegram", "error": str(e)}
 
 
+def check_fast2sms_wallet(api_key: str) -> Dict[str, Any]:
+    """
+    Queries Fast2SMS wallet balance and verifies API Key validity.
+    """
+    if not api_key:
+        return {"success": False, "error": "Fast2SMS API Key not configured."}
+    try:
+        url = "https://www.fast2sms.com/dev/wallet"
+        req = urllib.request.Request(
+            url,
+            headers={"authorization": api_key.strip(), "cache-control": "no-cache"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("return"):
+                return {
+                    "success": True,
+                    "wallet_inr": data.get("wallet", "0.00"),
+                    "sms_count": data.get("sms_count", 0),
+                    "message": f"API Key Valid! Wallet Balance: Rs. {data.get('wallet', '0.00')} ({data.get('sms_count', 0)} SMS available)",
+                }
+            return {"success": False, "error": data.get("message", "Invalid API key response from Fast2SMS")}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        try:
+            err_data = json.loads(body)
+            return {"success": False, "error": err_data.get("message", f"HTTP {e.code}")}
+        except Exception:
+            return {"success": False, "error": f"HTTP {e.code}: {body}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def send_fast2sms_alert(api_key: str, phone_number: str, message: str) -> Dict[str, Any]:
     """
     Sends free developer test SMS to Indian phone numbers via Fast2SMS API.
+    Handles official bulkV2 route and returns detailed diagnostic messages.
     """
     if not api_key:
         return {
             "success": False,
             "provider": "fast2sms",
-            "error": "Fast2SMS API Key not configured.",
+            "error": "Fast2SMS API Key not configured. Please paste your key in Settings.",
         }
 
     clean_phone = "".join(filter(str.isdigit, phone_number))
     if len(clean_phone) > 10:
         clean_phone = clean_phone[-10:]
 
-    try:
-        url = "https://www.fast2sms.com/dev/bulkV2"
-        params = {
-            "authorization": api_key,
-            "message": message[:159],  # 1 SMS segment limit
-            "language": "english",
-            "route": "q",
-            "numbers": clean_phone,
+    if len(clean_phone) != 10:
+        return {
+            "success": False,
+            "provider": "fast2sms",
+            "error": f"Invalid Indian phone number: '{phone_number}'. Must be 10 digits.",
         }
-        full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        req = urllib.request.Request(full_url, headers={"cache-control": "no-cache"})
-        with urllib.request.urlopen(req, timeout=8) as response:
+
+    # Clean message to standard GSM text (max 159 characters for 1 credit)
+    clean_msg = message.strip()[:159]
+
+    # Attempt POST request to bulkV2 endpoint
+    url = "https://www.fast2sms.com/dev/bulkV2"
+    payload = json.dumps({
+        "route": "q",
+        "message": clean_msg,
+        "language": "english",
+        "flash": 0,
+        "numbers": clean_phone,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "authorization": api_key.strip(),
+            "Content-Type": "application/json",
+            "cache-control": "no-cache",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
             res_data = json.loads(response.read().decode("utf-8"))
+            is_ok = bool(res_data.get("return", False))
+            raw_msg = res_data.get("message", ["SMS sent successfully"])
+            msg_str = ", ".join(raw_msg) if isinstance(raw_msg, list) else str(raw_msg)
             return {
-                "success": bool(res_data.get("return", False)),
+                "success": is_ok,
                 "provider": "fast2sms",
-                "detail": res_data.get("message", []),
+                "request_id": res_data.get("request_id"),
+                "detail": msg_str,
+                "error": None if is_ok else msg_str,
+            }
+    except urllib.error.HTTPError as e:
+        body_str = e.read().decode("utf-8", errors="ignore")
+        try:
+            err_json = json.loads(body_str)
+            raw_msg = err_json.get("message", body_str)
+            code = err_json.get("status_code", e.code)
+            if code == 999:
+                detailed_error = (
+                    f"Fast2SMS Account Notice: {raw_msg} "
+                    f"(Fast2SMS requires a 1-time Rs. 100 recharge at fast2sms.com to unlock the developer API route. "
+                    f"Your Rs. 50 signup credit is active in wallet, but API route requires this 1-time activation)."
+                )
+            elif code == 406:
+                detailed_error = f"Fast2SMS Rejection: {raw_msg}"
+            else:
+                detailed_error = f"Fast2SMS API Error ({code}): {raw_msg}"
+            return {
+                "success": False,
+                "provider": "fast2sms",
+                "error": detailed_error,
+                "raw_response": err_json,
+                "status_code": code,
+            }
+        except Exception:
+            return {
+                "success": False,
+                "provider": "fast2sms",
+                "error": f"Fast2SMS HTTP {e.code}: {body_str}",
             }
     except Exception as e:
-        return {"success": False, "provider": "fast2sms", "error": str(e)}
+        return {"success": False, "provider": "fast2sms", "error": f"Connection failed: {str(e)}"}
 
 
 def send_free_alert(

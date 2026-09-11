@@ -80,6 +80,24 @@ export function SettingsModal({ isOpen, onClose }) {
     }
   }
 
+  async function handleTestFast2sms() {
+    setTesting(true);
+    setStatusMsg("");
+    try {
+      const res = await api.testFast2sms(fast2smsApiKey);
+      if (res.success && res.wallet?.success) {
+        setStatusMsg(`✅ Fast2SMS API Key Verified! Wallet Balance: Rs. ${res.wallet.wallet_inr} (${res.wallet.sms_count} SMS available)`);
+      } else {
+        setStatusMsg("❌ Fast2SMS: " + (res.message || res.error || "Failed to verify Fast2SMS key"));
+      }
+    } catch (err) {
+      setStatusMsg("❌ Fast2SMS Test Error: " + err.message);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+
   return (
     <div style={{
       position: "fixed",
@@ -259,7 +277,7 @@ export function SettingsModal({ isOpen, onClose }) {
             {provider === "fast2sms" && (
               <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontSize: "0.82rem", color: "#334155", marginBottom: 10 }}>
-                  Fast2SMS offers a free developer route (<code>q</code>) for sending alerts to Indian phone numbers.
+                  Fast2SMS developer route for sending alerts to Indian phone numbers.
                 </div>
                 <div className="form-field" style={{ marginBottom: 10 }}>
                   <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: 4 }}>
@@ -272,6 +290,18 @@ export function SettingsModal({ isOpen, onClose }) {
                     onChange={(e) => setFast2smsApiKey(e.target.value)}
                     style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: "0.85rem" }}
                   />
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: "100%", background: "#f1f5f9", borderColor: "#cbd5e1", color: "#1e293b", fontSize: "0.85rem", fontWeight: 600 }}
+                  onClick={handleTestFast2sms}
+                  disabled={testing || !fast2smsApiKey}
+                >
+                  {testing ? "Checking Key & Wallet…" : "🔍 Verify Key & Check Wallet Balance"}
+                </button>
+                <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: 8, lineHeight: 1.4 }}>
+                  ℹ️ <em>Fast2SMS Note:</em> Free accounts receive welcome credits on signup. Fast2SMS requires completing one minimum Rs. 100 transaction on fast2sms.com to activate the developer API route for sending live SMS.
                 </div>
               </div>
             )}

@@ -7,6 +7,7 @@ from alerts.free_alert_dispatcher import (
     save_free_alert_settings,
     send_telegram_alert,
     send_fast2sms_alert,
+    check_fast2sms_wallet,
 )
 
 router = APIRouter(tags=["settings"])
@@ -156,3 +157,39 @@ def test_telegram(payload: TestTelegramPayload):
     )
     result = send_telegram_alert(token, chat_id, test_msg)
     return result
+
+
+class TestFast2SmsPayload(BaseModel):
+    api_key: str = ""
+    phone_number: str = ""
+
+
+@router.get("/settings/fast2sms-wallet")
+def get_fast2sms_wallet():
+    free = load_free_alert_settings()
+    api_key = free.get("fast2sms_api_key", "")
+    return check_fast2sms_wallet(api_key)
+
+
+@router.post("/settings/test-fast2sms")
+def test_fast2sms(payload: TestFast2SmsPayload):
+    free = load_free_alert_settings()
+    api_key = payload.api_key.strip() or free.get("fast2sms_api_key", "")
+    if not api_key:
+        return {"success": False, "error": "Please enter a Fast2SMS API Authorization Key first."}
+
+    wallet = check_fast2sms_wallet(api_key)
+    sms_res = None
+    if payload.phone_number.strip():
+        sms_res = send_fast2sms_alert(
+            api_key,
+            payload.phone_number.strip(),
+            "🚨 BHU-RAKSHAK TEST ALERT: Fast2SMS warning system connection test verified."
+        )
+
+    return {
+        "success": wallet.get("success", False),
+        "wallet": wallet,
+        "sms_result": sms_res,
+        "message": wallet.get("message") or wallet.get("error"),
+    }
