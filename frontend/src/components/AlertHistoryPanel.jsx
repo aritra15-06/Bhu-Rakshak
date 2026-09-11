@@ -7,6 +7,7 @@ export function AlertHistoryPanel() {
   const [error, setError] = useState(null);
   const [filterType, setFilterType] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   function fetchHistory() {
     setLoading(true);
@@ -27,6 +28,32 @@ export function AlertHistoryPanel() {
         setError("Failed to load history data from server.");
       })
       .finally(() => setLoading(false));
+  }
+
+  function handleDeleteHistory() {
+    const isAlertsTab = activeSubTab === "alerts";
+    const promptMsg = isAlertsTab
+      ? "Are you sure you want to delete all dispatched citizen alert records? This cannot be undone."
+      : "Are you sure you want to delete all alert and incident history records? This cannot be undone.";
+
+    if (!window.confirm(promptMsg)) return;
+
+    setDeleting(true);
+    fetch(`/api/alerts/history?scope=${isAlertsTab ? "alerts" : "all"}`, {
+      method: "DELETE",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(() => {
+        fetchHistory();
+      })
+      .catch((err) => {
+        console.error("Failed to delete history:", err);
+        alert("Failed to delete history. Please try again.");
+      })
+      .finally(() => setDeleting(false));
   }
 
   useEffect(() => {
@@ -83,9 +110,26 @@ export function AlertHistoryPanel() {
             Comprehensive audit log of citizen alert dispatches and previously predicted landslide danger occurrences across Sikkim.
           </p>
         </div>
-        <button className="btn btn-sm btn-outline" onClick={fetchHistory} title="Refresh history records">
-          🔄 Refresh
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="btn btn-sm btn-outline" onClick={fetchHistory} title="Refresh history records">
+            🔄 Refresh
+          </button>
+          <button
+            className="btn btn-sm"
+            onClick={handleDeleteHistory}
+            disabled={deleting || (activeSubTab === "alerts" ? historyData.alerts.length === 0 : (historyData.alerts.length === 0 && historyData.incidents.length === 0))}
+            style={{
+              background: "#fee2e2",
+              color: "#b91c1c",
+              border: "1px solid #fca5a5",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+            title={activeSubTab === "alerts" ? "Delete all dispatched alert records" : "Delete all alert and incident history"}
+          >
+            {deleting ? "⏳ Deleting..." : "🗑️ Delete History"}
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}

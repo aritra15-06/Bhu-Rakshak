@@ -92,21 +92,6 @@ export function MapView() {
 
           return (
             <div key={locationId}>
-              {/* Outer Hazard Buffer Ring */}
-              {(isUnstable || isMarginal || isSelected) && (
-                <CircleMarker
-                  center={[params.latitude, params.longitude]}
-                  radius={isSelected ? 34 : 26}
-                  pathOptions={{
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: isUnstable ? 0.22 : 0.12,
-                    weight: isUnstable ? 2.5 : 1.5,
-                    dashArray: isUnstable ? "6 4" : undefined,
-                  }}
-                />
-              )}
-
               {/* Core Station Marker */}
               <CircleMarker
                 center={[params.latitude, params.longitude]}

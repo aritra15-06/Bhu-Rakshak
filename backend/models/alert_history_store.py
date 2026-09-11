@@ -269,3 +269,28 @@ def record_danger_incident(
     _incidents_history.insert(0, entry)
     _save_json_file(INCIDENTS_HISTORY_FILE, _incidents_history)
     return entry
+
+
+def clear_alerts_history() -> int:
+    """Clears all dispatched citizen alert records."""
+    global _alerts_history
+    count = len(_alerts_history)
+    _alerts_history = []
+    _save_json_file(ALERTS_HISTORY_FILE, _alerts_history)
+    return count
+
+
+def clear_all_history(keep_default_incidents: bool = False) -> Dict[str, int]:
+    """Clears all dispatched alerts and past danger incident records."""
+    global _alerts_history, _incidents_history
+    alerts_count = len(_alerts_history)
+    incidents_count = len(_incidents_history)
+    _alerts_history = []
+    if keep_default_incidents:
+        _incidents_history = list(DEFAULT_HISTORICAL_INCIDENTS)
+    else:
+        _incidents_history = []
+    _save_json_file(ALERTS_HISTORY_FILE, _alerts_history)
+    _save_json_file(INCIDENTS_HISTORY_FILE, _incidents_history)
+    return {"cleared_alerts": alerts_count, "cleared_incidents": incidents_count}
+

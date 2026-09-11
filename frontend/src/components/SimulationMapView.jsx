@@ -315,34 +315,7 @@ export function SimulationMapView({
 
           return (
             <div key={locationId}>
-              {(isUnstable || isMarginal || isSelected) && (
-                <CircleMarker
-                  center={[params.latitude, params.longitude]}
-                  radius={isSelected ? 32 : 24}
-                  pathOptions={{
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: isUnstable ? 0.25 : 0.12,
-                    weight: isUnstable ? 2.5 : 1.5,
-                    dashArray: isUnstable ? "6 4" : undefined,
-                  }}
-                />
-              )}
-              {/* Custom Location Distinct Halo */}
-              {data?.is_custom && (
-                <CircleMarker
-                  center={[params.latitude, params.longitude]}
-                  radius={isSelected ? 38 : 26}
-                  pathOptions={{
-                    color: "#8b5cf6",
-                    fillColor: "#c084fc",
-                    fillOpacity: 0.3,
-                    weight: 2.5,
-                    dashArray: "4 3",
-                  }}
-                />
-              )}
-
+              {/* Core Station Marker */}
               <CircleMarker
                 center={[params.latitude, params.longitude]}
                 radius={isSelected ? 13 : 10}

@@ -9,6 +9,8 @@ from backend.models.alert_history_store import (
     list_incidents_history,
     record_alert_dispatch,
     record_danger_incident,
+    clear_alerts_history,
+    clear_all_history,
 )
 from backend.prediction_bridge import predict_from_params
 from alerts.dispatch import run_alert_cycle
@@ -291,5 +293,25 @@ def get_alerts_history():
         "total_alerts": len(alerts_list),
         "total_incidents": len(incidents_list),
     }
+
+
+@router.delete("/alerts/history")
+def delete_alerts_history(scope: Optional[str] = "all"):
+    """
+    Clears recorded history.
+    scope="alerts": Clears only dispatched alerts.
+    scope="all": Clears both alerts and incidents.
+    """
+    if scope == "alerts":
+        cleared = clear_alerts_history()
+        return {"success": True, "cleared_alerts": cleared, "cleared_incidents": 0}
+    else:
+        res = clear_all_history(keep_default_incidents=False)
+        return {
+            "success": True,
+            "cleared_alerts": res["cleared_alerts"],
+            "cleared_incidents": res["cleared_incidents"],
+        }
+
 
 
