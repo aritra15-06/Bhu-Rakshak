@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { SimulationMapView } from "./SimulationMapView";
-import { Terrain3DView } from "./Terrain3DView";
 import {
   getDailySimulationState,
   getCalendarDate,
@@ -11,7 +10,6 @@ const CORE_REGIONS = ["LOC01", "LOC02", "LOC03"];
 const ALL_ZONES = ["LOC01", "LOC02", "LOC03", "LOC04", "LOC05", "LOC06"];
 
 export function SimulationWorkspace() {
-  const [viewMode, setViewMode] = useState("map"); // "map" or "3d"
   const [showPeople, setShowPeople] = useState(true);
   const [showInfrastructure, setShowInfrastructure] = useState(false);
   const [regionFilter, setRegionFilter] = useState("3"); // "3" or "6"
@@ -220,54 +218,71 @@ export function SimulationWorkspace() {
 
   return (
     <div className="sim-workspace-layout">
-      {/* Left / Center Section: Dedicated Map & 3D Terrain */}
+      {/* On-Screen Emergency Notification Toast Popup - Fixed to top-right of entire website */}
+      {simAlertToast && (
+        <div className="sim-emergency-popup-toast">
+          <div className="sim-toast-header">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="pulse-danger-dot" style={{ width: 10, height: 10 }} />
+              <span style={{ fontWeight: 800, color: "#991b1b", fontSize: 13, letterSpacing: "0.5px" }}>
+                🚨 AUTOMATIC EMERGENCY WARNING ISSUED
+              </span>
+            </div>
+            <button
+              className="sim-toast-close"
+              onClick={() => setSimAlertToast(null)}
+              title="Dismiss Notification"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="sim-toast-body">
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+              📍 {simAlertToast.name} ({simAlertToast.locationId})
+            </div>
+            <div style={{ fontSize: 12.5, color: "#7f1d1d", lineHeight: 1.45, marginBottom: 8 }}>
+              ⚠️ <strong>Landslide Probability Surge: {simAlertToast.probability}%</strong>.
+              Factor of Safety dropped to <strong>{simAlertToast.fos}</strong> (Critical Slope Deformation).
+              {simAlertToast.roadBlocked ? " Connecting highway corridor is SEVERED by debris." : ""}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, fontSize: 11.5, color: "#64748b" }}>
+              <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/365</span>
+              <span style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                📱 SMS Auto-Dispatched to Citizens & PWD Control
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left / Center Section: Dedicated Map */}
       <div className="sim-map-container">
-        {/* Top Controls Toolbar: 2D/3D toggle, people button, and 1-Year Timeline Controller */}
+        {/* Top Controls Toolbar: people button, roads button, and 1-Year Timeline Controller */}
         <div className="sim-map-topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* 2D Map vs 3D Terrain Switch */}
-            <div className="sim-view-toggle">
-              <button
-                className={`sim-toggle-btn ${viewMode === "map" ? "active" : ""}`}
-                onClick={() => setViewMode("map")}
-              >
-                🗺️ 2D Simulation Map
-              </button>
-              <button
-                className={`sim-toggle-btn ${viewMode === "3d" ? "active" : ""}`}
-                onClick={() => setViewMode("3d")}
-              >
-                🏔️ 3D Terrain Model
-              </button>
-            </div>
-
-            {/* Dedicated People Toggle Button (for 2D Map) */}
-            {viewMode === "map" && (
-              <button
-                className={`sim-people-btn ${showPeople ? "active" : ""}`}
-                onClick={() => setShowPeople(!showPeople)}
-                title="Toggle population and observer pins across North Sikkim settlements"
-              >
-                <span>{showPeople ? "👥 People Marked: ON" : "👥 People Marked: OFF"}</span>
-                <span className={`sim-people-badge ${showPeople ? "on" : "off"}`}>
-                  {showPeople ? "Active" : "Hidden"}
-                </span>
-              </button>
-            )}
+            {/* Dedicated People Toggle Button */}
+            <button
+              className={`sim-people-btn ${showPeople ? "active" : ""}`}
+              onClick={() => setShowPeople(!showPeople)}
+              title="Toggle population and observer pins across North Sikkim settlements"
+            >
+              <span>{showPeople ? "👥 People Marked: ON" : "👥 People Marked: OFF"}</span>
+              <span className={`sim-people-badge ${showPeople ? "on" : "off"}`}>
+                {showPeople ? "Active" : "Hidden"}
+              </span>
+            </button>
 
             {/* Dedicated Towns & Government Roads Toggle Button */}
-            {viewMode === "map" && (
-              <button
-                className={`sim-people-btn ${showInfrastructure ? "active" : ""}`}
-                onClick={() => setShowInfrastructure(!showInfrastructure)}
-                title="Toggle authentic government highways (BRO/PWD) and settlement towns across Sikkim"
-              >
-                <span>{showInfrastructure ? "🛣️ Towns & Roads: ON" : "🛣️ Towns & Roads: OFF"}</span>
-                <span className={`sim-people-badge ${showInfrastructure ? "on" : "off"}`}>
-                  {showInfrastructure ? "Active" : "Hidden"}
-                </span>
-              </button>
-            )}
+            <button
+              className={`sim-people-btn ${showInfrastructure ? "active" : ""}`}
+              onClick={() => setShowInfrastructure(!showInfrastructure)}
+              title="Toggle authentic government highways (BRO/PWD) and settlement towns across Sikkim"
+            >
+              <span>{showInfrastructure ? "🛣️ Towns & Roads: ON" : "🛣️ Towns & Roads: OFF"}</span>
+              <span className={`sim-people-badge ${showInfrastructure ? "on" : "off"}`}>
+                {showInfrastructure ? "Active" : "Hidden"}
+              </span>
+            </button>
           </div>
 
           {/* 1-Year Simulation Playback Controls with Multi-Speed & Slow-Motion (< 1x) */}
@@ -365,56 +380,15 @@ export function SimulationWorkspace() {
           </div>
         </div>
 
-        {/* Dedicated View Body (2D Map or 3D Terrain) */}
-        <div className="sim-map-view-body" style={{ position: "relative" }}>
-          {/* On-Screen Emergency Notification Toast Popup */}
-          {simAlertToast && (
-            <div className="sim-emergency-popup-toast">
-              <div className="sim-toast-header">
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span className="pulse-danger-dot" style={{ width: 10, height: 10 }} />
-                  <span style={{ fontWeight: 800, color: "#991b1b", fontSize: 13, letterSpacing: "0.5px" }}>
-                    🚨 AUTOMATIC EMERGENCY WARNING ISSUED
-                  </span>
-                </div>
-                <button
-                  className="sim-toast-close"
-                  onClick={() => setSimAlertToast(null)}
-                  title="Dismiss Notification"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="sim-toast-body">
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
-                  📍 {simAlertToast.name} ({simAlertToast.locationId})
-                </div>
-                <div style={{ fontSize: 12.5, color: "#7f1d1d", lineHeight: 1.45, marginBottom: 8 }}>
-                  ⚠️ <strong>Landslide Probability Surge: {simAlertToast.probability}%</strong>.
-                  Factor of Safety dropped to <strong>{simAlertToast.fos}</strong> (Critical Slope Deformation).
-                  {simAlertToast.roadBlocked ? " Connecting highway corridor is SEVERED by debris." : ""}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, fontSize: 11.5, color: "#64748b" }}>
-                  <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/365</span>
-                  <span style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-                    📱 SMS Auto-Dispatched to Citizens & PWD Control
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {viewMode === "map" ? (
-            <SimulationMapView
-              sites={activeSimSites}
-              selectedSite={selectedSite}
-              onSelectSite={setSelectedSite}
-              showPeople={showPeople}
-              showInfrastructure={showInfrastructure}
-            />
-          ) : (
-            <Terrain3DView />
-          )}
+        {/* Dedicated 2D Simulation Map View */}
+        <div className="sim-map-view-body">
+          <SimulationMapView
+            sites={activeSimSites}
+            selectedSite={selectedSite}
+            onSelectSite={setSelectedSite}
+            showPeople={showPeople}
+            showInfrastructure={showInfrastructure}
+          />
         </div>
       </div>
 
@@ -491,10 +465,6 @@ export function SimulationWorkspace() {
           </div>
         )}
 
-        {/* Explanatory Banner for Judges & Teachers */}
-        <div className="sim-engine-explainer-banner">
-          <span>💡 <strong>Real-Time Dynamic Recovery:</strong> Notice how when a cloudburst strikes, a region turns <strong>RED</strong> due to acute pore pressure. Once the storm passes and runoff drains over a few days, the slope automatically recovers back to the standard landscape (<strong>GREEN</strong>).</span>
-        </div>
 
 
         {/* Scrollable list of Region Cards without manual sliders */}

@@ -2160,17 +2160,18 @@ input[type="range"] {
   font-weight: 600;
 }
 
-/* Floating Emergency Popup Toast inside Simulation */
+/* Floating Emergency Popup Toast fixed to the top right of the entire website */
 .sim-emergency-popup-toast {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 1050;
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 99999;
   max-width: 440px;
+  width: calc(100vw - 48px);
   background: #ffffff;
   border: 2px solid #dc2626;
   border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(220, 38, 38, 0.28), 0 4px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 36px rgba(220, 38, 38, 0.35), 0 4px 14px rgba(0, 0, 0, 0.15);
   padding: 14px;
   animation: slideInDown 0.35s ease-out;
 }
