@@ -28,11 +28,14 @@ def _load_seed_data():
     locations_path = os.path.join(REPO_ROOT, "demo", "pilot_locations.json")
 
     with open(villages_path, "r", encoding="utf-8") as f:
-        villages = json.load(f)["villages"]
+        v_raw = json.load(f)
+        villages = v_raw.get("villages", []) if isinstance(v_raw, dict) else v_raw
     with open(roads_path, "r", encoding="utf-8") as f:
-        roads = json.load(f)["roads"]
+        r_raw = json.load(f)
+        roads = r_raw.get("roads", []) if isinstance(r_raw, dict) else r_raw
     with open(locations_path, "r", encoding="utf-8") as f:
-        locations = json.load(f)["locations"]
+        loc_raw = json.load(f)
+        locations = loc_raw.get("locations", []) if isinstance(loc_raw, dict) else loc_raw
     return villages, roads, {loc["location_id"]: loc for loc in locations}
 
 
@@ -117,7 +120,10 @@ def get_impact(
     road_features = []
 
     for r in roads:
-        line_coords = r["coordinates"]
+        line_coords = r.get("coordinates") or r.get("geometry", {}).get("coordinates")
+        if not line_coords or len(line_coords) < 2:
+            continue
+        road_class = r.get("road_class") or r.get("category", "state_highway")
         line_m = transform(to_meters, LineString(line_coords))
         dist_to_road_m = float(hazard_point_m.distance(line_m))
         intersects = buffer_m_geom.intersects(line_m)
@@ -140,7 +146,7 @@ def get_impact(
         road_entry = {
             "id": r["id"],
             "name": r["name"],
-            "road_class": r["road_class"],
+            "road_class": road_class,
             "distance_m": round(dist_to_road_m, 1),
             "distance_km": round(dist_to_road_m / 1000.0, 2),
             "corridor_description": corridor_desc,
@@ -156,7 +162,7 @@ def get_impact(
                 "properties": {
                     "id": r["id"],
                     "name": r["name"],
-                    "road_class": r["road_class"],
+                    "road_class": road_class,
                     "corridor": corridor_desc,
                     "distance_m": round(dist_to_road_m, 1),
                 },

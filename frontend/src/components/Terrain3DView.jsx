@@ -81,12 +81,36 @@ export function Terrain3DView() {
     };
   }, []);
 
-  // Fetch heightmap elevation grid
+  // Fetch heightmap elevation grid with resilient synthetic fallback
   useEffect(() => {
     fetch("/terrain3d/heightmaps/north_sikkim_region_heightmap.json")
-      .then((r) => r.json())
-      .then((data) => setHeightmap(data))
-      .catch((e) => console.error("failed to load heightmap", e));
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.heights && data?.grid_size) {
+          setHeightmap(data);
+        } else {
+          throw new Error("Invalid heightmap payload");
+        }
+      })
+      .catch((e) => {
+        console.warn("Using fallback synthetic terrain elevation model:", e);
+        // Resilient North Sikkim Himalayan elevation profile: 1200m - 4200m
+        const gridSize = 64;
+        const heights = [];
+        for (let j = 0; j < gridSize; j++) {
+          for (let i = 0; i < gridSize; i++) {
+            const x = (i - gridSize / 2) / 10.0;
+            const y = (j - gridSize / 2) / 10.0;
+            const base = 2600 + Math.sin(x * 0.7) * 750 + Math.cos(y * 0.7) * 850;
+            const ridge = Math.abs(Math.sin(x * 1.4 + y * 0.6)) * 600;
+            heights.push(Math.round(base + ridge));
+          }
+        }
+        setHeightmap({ grid_size: gridSize, heights });
+      });
   }, []);
 
   // Switch terrain texture smoothly between live satellite and offline landscape
@@ -162,42 +186,52 @@ export function Terrain3DView() {
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
 
-    // Load textures: offline realistic landscape & online live satellite
+    // Load textures: offline realistic landscape & local high-res satellite
     const texLoader = new THREE.TextureLoader();
+    texLoader.setCrossOrigin("anonymous");
 
     // 1. Offline realistic texture with lush Himalayan vegetation
     const offlineTex = texLoader.load("/terrain3d/textures/north_sikkim_offline_realistic.jpg");
     offlineTex.wrapS = THREE.ClampToEdgeWrapping;
     offlineTex.wrapT = THREE.ClampToEdgeWrapping;
 
-    // 2. Online live satellite texture with automatic fallback to local satellite asset
-    const LIVE_SATELLITE_URL =
-      "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=88.45,27.05,88.80,27.75&bboxSR=4326&imageSR=4326&size=1024,1024&format=jpg&f=image";
-
-    const satTex = texLoader.load(
-      LIVE_SATELLITE_URL,
-      () => {
-        if (sceneRef.current?.terrainMesh && mode === "satellite") {
-          sceneRef.current.terrainMesh.material.map = satTex;
-          sceneRef.current.terrainMesh.material.needsUpdate = true;
-        }
-      },
-      undefined,
-      () => {
-        // If live web fetch is blocked or offline, use cached satellite asset
-        texLoader.load("/terrain3d/textures/north_sikkim_satellite.jpg", (cached) => {
-          sceneRef.current.satTex = cached;
-          if (sceneRef.current?.terrainMesh && mode === "satellite") {
-            sceneRef.current.terrainMesh.material.map = cached;
-            sceneRef.current.terrainMesh.material.needsUpdate = true;
-          }
-        });
+    // 2. High-res Satellite texture - local bundled asset loaded immediately for instant render
+    let satTex = texLoader.load("/terrain3d/textures/north_sikkim_satellite.jpg", (localTex) => {
+      localTex.wrapS = THREE.ClampToEdgeWrapping;
+      localTex.wrapT = THREE.ClampToEdgeWrapping;
+      if (sceneRef.current?.terrainMesh && mode === "satellite") {
+        sceneRef.current.terrainMesh.material.map = localTex;
+        sceneRef.current.terrainMesh.material.needsUpdate = true;
       }
-    );
+    });
     satTex.wrapS = THREE.ClampToEdgeWrapping;
     satTex.wrapT = THREE.ClampToEdgeWrapping;
 
-    const initialTex = (mode === "satellite" && isOnline) ? satTex : offlineTex;
+    // If online, optionally upgrade to live ArcGIS satellite imagery in the background
+    if (isOnline) {
+      const LIVE_SATELLITE_URL =
+        "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=88.45,27.05,88.80,27.75&bboxSR=4326&imageSR=4326&size=1024,1024&format=jpg&f=image";
+      texLoader.load(
+        LIVE_SATELLITE_URL,
+        (liveTex) => {
+          liveTex.wrapS = THREE.ClampToEdgeWrapping;
+          liveTex.wrapT = THREE.ClampToEdgeWrapping;
+          if (sceneRef.current) {
+            sceneRef.current.satTex = liveTex;
+            if (sceneRef.current.terrainMesh && mode === "satellite") {
+              sceneRef.current.terrainMesh.material.map = liveTex;
+              sceneRef.current.terrainMesh.material.needsUpdate = true;
+            }
+          }
+        },
+        undefined,
+        () => {
+          // Seamlessly retain local high-res satellite texture if remote network is slow
+        }
+      );
+    }
+
+    const initialTex = mode === "satellite" ? satTex : offlineTex;
 
     const terrainMaterial = new THREE.MeshStandardMaterial({
       map: initialTex,

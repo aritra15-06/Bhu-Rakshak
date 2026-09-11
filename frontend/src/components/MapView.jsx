@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { useSiteState } from "../state/SiteStateContext";
 import "leaflet/dist/leaflet.css";
@@ -26,6 +27,7 @@ function getSiteColor(data) {
 
 export function MapView() {
   const { sites, selectedSite, setSelectedSite, loading } = useSiteState();
+  const [mapLayer, setMapLayer] = useState("streets");
 
   if (loading) return <div className="empty-state">Loading map…</div>;
 
@@ -36,6 +38,22 @@ export function MapView() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Floating Map Layer Switcher: Street vs Satellite */}
+      <div className="map-layer-switcher">
+        <button
+          className={`map-layer-btn ${mapLayer === "streets" ? "active" : ""}`}
+          onClick={() => setMapLayer("streets")}
+        >
+          🗺️ Streets
+        </button>
+        <button
+          className={`map-layer-btn ${mapLayer === "satellite" ? "active" : ""}`}
+          onClick={() => setMapLayer("satellite")}
+        >
+          🛰️ Satellite
+        </button>
+      </div>
+
       {/* Floating Map Severity Legend */}
       <div className="map-floating-legend">
         <div className="legend-title">Hazard Severity</div>
@@ -46,10 +64,18 @@ export function MapView() {
       </div>
 
       <MapContainer center={center} zoom={9} style={{ height: "100%", width: "100%" }}>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        {mapLayer === "streets" ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        ) : (
+          <TileLayer
+            attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+        )}
 
         {/* Monitored Station Markers */}
         {entries.map(([locationId, data]) => {

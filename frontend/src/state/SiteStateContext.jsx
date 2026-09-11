@@ -61,21 +61,26 @@ export function SiteStateProvider({ children }) {
 
   useEffect(() => {
     (async () => {
-      const { locations } = await api.getLocations();
-      const results = {};
-      for (const loc of locations) {
-        try {
-          const pred = await api.predict(loc.location_id);
-          results[loc.location_id] = pred;
-        } catch (e) {
-          console.error(`initial predict failed for ${loc.location_id}`, e);
+      try {
+        const { locations } = await api.getLocations();
+        const results = {};
+        for (const loc of locations) {
+          try {
+            const pred = await api.predict(loc.location_id);
+            results[loc.location_id] = pred;
+          } catch (e) {
+            console.error(`initial predict failed for ${loc.location_id}`, e);
+          }
         }
+        setSites(results);
+        if (locations.length > 0 && !selectedSite) {
+          setSelectedSite(locations[0].location_id);
+        }
+      } catch (err) {
+        console.error("Failed to load initial site data from API:", err);
+      } finally {
+        setLoading(false);
       }
-      setSites(results);
-      if (locations.length > 0 && !selectedSite) {
-        setSelectedSite(locations[0].location_id);
-      }
-      setLoading(false);
     })();
   }, []);
 

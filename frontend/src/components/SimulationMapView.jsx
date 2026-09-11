@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Polyline, Tooltip, Popup } from "react-leaflet";
 import L from "leaflet";
 import { MOCK_POPULATION, ROAD_CORRIDORS, SIKKIM_SETTLEMENTS } from "../data/mockPopulation";
@@ -47,6 +48,7 @@ function getSiteColor(data) {
 }
 
 export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, showPeople = true, showInfrastructure = false }) {
+  const [mapLayer, setMapLayer] = useState("streets");
   const entries = Object.entries(sites);
   const firstData = entries[0]?.[1];
   const center = entries.length && entries[0][1]?.latitude
@@ -117,6 +119,22 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Floating Map Layer Switcher: Street vs Satellite */}
+      <div className="map-layer-switcher">
+        <button
+          className={`map-layer-btn ${mapLayer === "streets" ? "active" : ""}`}
+          onClick={() => setMapLayer("streets")}
+        >
+          🗺️ Streets
+        </button>
+        <button
+          className={`map-layer-btn ${mapLayer === "satellite" ? "active" : ""}`}
+          onClick={() => setMapLayer("satellite")}
+        >
+          🛰️ Satellite
+        </button>
+      </div>
+
       {/* Active Evacuation Counter Pill */}
       {showPeople && evacCount > 0 && (
         <div className="sim-map-evac-pill">
@@ -147,10 +165,18 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
       </div>
 
       <MapContainer center={center} zoom={9} style={{ height: "100%", width: "100%" }}>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        {mapLayer === "streets" ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        ) : (
+          <TileLayer
+            attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+        )}
 
         {/* Toggleable Government Highway Corridors */}
         {showInfrastructure &&
