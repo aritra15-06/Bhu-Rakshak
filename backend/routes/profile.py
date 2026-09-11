@@ -1,9 +1,8 @@
 """
-Application profile and version management router.
+Application profile and configuration router.
 
-Manages the dual-version modes of Bhu-Rakshak:
-- version1 ("operations"): Full operator console with Alerts section & Settings modal, Citizen Reports removed. (DEFAULT ON SERVER BOOT)
-- version2 ("history"): Public/monitoring console with Alert History & Landslide Tracking, Alerts section & Settings removed, Citizen Reports removed.
+Bhu-Rakshak Unified Architecture:
+Unified Early-Warning, Geotechnical Intelligence & Alert History Console.
 """
 
 from __future__ import annotations
@@ -16,14 +15,13 @@ from pydantic import BaseModel
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROFILE_FILE = os.path.join(REPO_ROOT, "data", "app_profile.json")
 
-# Default profile on fresh server boot is always "operations" (Version 1)
-DEFAULT_PROFILE = "operations"
+DEFAULT_PROFILE = "history"
 
 router = APIRouter()
 
 
 class ProfileUpdateRequest(BaseModel):
-    profile: str  # "operations" or "history"
+    profile: str = "history"
 
 
 def get_active_profile() -> str:
@@ -37,16 +35,16 @@ def get_active_profile() -> str:
     return DEFAULT_PROFILE
 
 
-def set_active_profile(profile_name: str) -> str:
-    valid = "history" if profile_name in ("history", "version2", "viewer") else "operations"
+def set_active_profile(profile_name: str = "history") -> str:
+    valid = "history"
     try:
         os.makedirs(os.path.dirname(PROFILE_FILE), exist_ok=True)
         with open(PROFILE_FILE, "w", encoding="utf-8") as f:
             json.dump({
-                "active_profile": valid,
-                "version_number": 1 if valid == "operations" else 2,
-                "description": "Operations Mode (Alerts & Settings)" if valid == "operations" else "Public Monitoring Mode (Alert & Landslide History)",
-                "default_on_boot": "operations"
+                "active_profile": "history",
+                "version_number": 2,
+                "description": "Unified Early-Warning, Geotechnical Intelligence & Alert History Console",
+                "default_on_boot": "history"
             }, f, indent=2)
     except Exception as e:
         print(f"[profile] Warning: failed to save profile: {e}")
@@ -55,16 +53,15 @@ def set_active_profile(profile_name: str) -> str:
 
 @router.get("/app-profile")
 def read_profile():
-    active = get_active_profile()
     return {
-        "active_profile": active,
-        "version_number": 1 if active == "operations" else 2,
-        "version_name": "Operations Console (Alerts + Settings)" if active == "operations" else "Public Monitoring Console (Alert & Landslide History)",
+        "active_profile": "history",
+        "version_number": 2,
+        "version_name": "Bhu-Rakshak Unified Early-Warning & Geotechnical Intelligence Console",
         "features": {
-            "has_alerts_tab": active == "operations",
-            "has_settings_modal": active == "operations",
-            "has_alert_history_tab": active == "history",
-            "has_citizen_reports": False,  # Removed in both versions as instructed
+            "has_alerts_tab": False,
+            "has_settings_modal": False,
+            "has_alert_history_tab": True,
+            "has_citizen_reports": False,
         }
     }
 
@@ -75,5 +72,6 @@ def update_profile(body: ProfileUpdateRequest):
     return {
         "success": True,
         "active_profile": updated,
-        "version_number": 1 if updated == "operations" else 2,
+        "version_number": 2,
     }
+
