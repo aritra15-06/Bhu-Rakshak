@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useSiteState } from "../state/SiteStateContext";
+import {
+  saveSatelliteTexture,
+  loadSatelliteTexture,
+  getSatelliteMeta,
+} from "../utils/satelliteStorage";
 
 const STATE_COLORS = {
   STABLE: "#4a7a5c",
@@ -61,17 +66,22 @@ export function Terrain3DView() {
   const { sites, setSelectedSite, loading } = useSiteState();
   const [heightmap, setHeightmap] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
-  const [mode, setMode] = useState(typeof navigator !== "undefined" && navigator.onLine ? "satellite" : "offline");
+  const [mode, setMode] = useState("satellite");
+  const [cachedMeta, setCachedMeta] = useState(() => getSatelliteMeta());
+  const [satelliteSource, setSatelliteSource] = useState(typeof navigator !== "undefined" && navigator.onLine ? "live" : "cached");
   const sceneRef = useRef({});
 
-  // Detect live network connection status
+  // Detect live network connection status & auto-reconnect satellite
   useEffect(() => {
     function onOnline() {
       setIsOnline(true);
+      if (sceneRef.current?.fetchLiveSatellite) {
+        sceneRef.current.fetchLiveSatellite();
+      }
     }
     function onOffline() {
       setIsOnline(false);
-      setMode("offline");
+      setSatelliteSource("cached");
     }
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
@@ -195,27 +205,30 @@ export function Terrain3DView() {
     offlineTex.wrapS = THREE.ClampToEdgeWrapping;
     offlineTex.wrapT = THREE.ClampToEdgeWrapping;
 
-    // 2. High-res Satellite texture - local bundled asset loaded immediately for instant render
-    let satTex = texLoader.load("/terrain3d/textures/north_sikkim_satellite.jpg", (localTex) => {
-      localTex.wrapS = THREE.ClampToEdgeWrapping;
-      localTex.wrapT = THREE.ClampToEdgeWrapping;
-      if (sceneRef.current?.terrainMesh && mode === "satellite") {
-        sceneRef.current.terrainMesh.material.map = localTex;
-        sceneRef.current.terrainMesh.material.needsUpdate = true;
-      }
-    });
+    // 2. High-res Satellite texture with Persistent IndexedDB Storage & Offline Caching
+    let satTex = texLoader.load("/terrain3d/textures/north_sikkim_satellite.jpg");
     satTex.wrapS = THREE.ClampToEdgeWrapping;
     satTex.wrapT = THREE.ClampToEdgeWrapping;
 
-    // If online, optionally upgrade to live ArcGIS satellite imagery in the background
-    if (isOnline) {
+    // Function to fetch live satellite data from ArcGIS when online & persist into storage
+    async function fetchLiveSatellite() {
       const LIVE_SATELLITE_URL =
         "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=88.45,27.05,88.80,27.75&bboxSR=4326&imageSR=4326&size=1024,1024&format=jpg&f=image";
-      texLoader.load(
-        LIVE_SATELLITE_URL,
-        (liveTex) => {
+      try {
+        const res = await fetch(LIVE_SATELLITE_URL, { mode: "cors" });
+        if (!res.ok) throw new Error(`ArcGIS returned ${res.status}`);
+        const blob = await res.blob();
+
+        // Save raw satellite imagery into IndexedDB persistent storage
+        const meta = await saveSatelliteTexture(blob, { source: "ArcGIS Live Satellite Stream" });
+        if (meta) setCachedMeta(meta);
+
+        // Load into Three.js texture
+        const objectUrl = URL.createObjectURL(blob);
+        texLoader.load(objectUrl, (liveTex) => {
           liveTex.wrapS = THREE.ClampToEdgeWrapping;
           liveTex.wrapT = THREE.ClampToEdgeWrapping;
+          satTex = liveTex;
           if (sceneRef.current) {
             sceneRef.current.satTex = liveTex;
             if (sceneRef.current.terrainMesh && mode === "satellite") {
@@ -223,13 +236,43 @@ export function Terrain3DView() {
               sceneRef.current.terrainMesh.material.needsUpdate = true;
             }
           }
-        },
-        undefined,
-        () => {
-          // Seamlessly retain local high-res satellite texture if remote network is slow
-        }
-      );
+          setSatelliteSource("live");
+          setIsOnline(true);
+        });
+      } catch (err) {
+        console.warn("[Terrain3DView] Live satellite fetch failed, using stored offline texture:", err);
+        setSatelliteSource("cached");
+      }
     }
+
+    // Step A: Load the previously stored 3D satellite image from persistent storage (IndexedDB)
+    loadSatelliteTexture().then((cached) => {
+      if (cached?.url) {
+        setCachedMeta(cached.metadata);
+        texLoader.load(cached.url, (loadedCachedTex) => {
+          loadedCachedTex.wrapS = THREE.ClampToEdgeWrapping;
+          loadedCachedTex.wrapT = THREE.ClampToEdgeWrapping;
+          satTex = loadedCachedTex;
+          if (sceneRef.current) {
+            sceneRef.current.satTex = loadedCachedTex;
+            if (sceneRef.current.terrainMesh && mode === "satellite") {
+              sceneRef.current.terrainMesh.material.map = loadedCachedTex;
+              sceneRef.current.terrainMesh.material.needsUpdate = true;
+            }
+          }
+        });
+        if (!navigator.onLine) {
+          setSatelliteSource("cached");
+        }
+      }
+
+      // Step B: If machine is currently online, fetch fresh live satellite stream and update cache!
+      if (navigator.onLine) {
+        fetchLiveSatellite();
+      } else {
+        setSatelliteSource("cached");
+      }
+    });
 
     const initialTex = mode === "satellite" ? satTex : offlineTex;
 
@@ -377,7 +420,7 @@ export function Terrain3DView() {
     }
     animate();
 
-    sceneRef.current = { renderer, scene, terrainMesh, satTex, offlineTex };
+    sceneRef.current = { renderer, scene, terrainMesh, satTex, offlineTex, fetchLiveSatellite };
 
     return () => {
       cancelAnimationFrame(frameId);
@@ -397,16 +440,32 @@ export function Terrain3DView() {
 
   return (
     <div style={{ height: "100%", width: "100%", position: "relative" }}>
-      {/* Clean Status Pill */}
+      {/* Network & Offline Storage Status Pill */}
       <div className="terrain-status-pill">
         <span
           className="terrain-status-dot"
-          style={{ background: mode === "satellite" ? "#22c55e" : "#eab308" }}
+          style={{
+            background:
+              mode !== "satellite"
+                ? "#eab308"
+                : isOnline && satelliteSource === "live"
+                ? "#22c55e"
+                : "#a855f7",
+          }}
         />
         <span>
-          {mode === "satellite"
-            ? (isOnline ? "🛰️ Live Satellite Terrain" : "🛰️ Satellite Terrain (Cached)")
-            : "🌱 3D Terrain Model (Offline)"}
+          {mode === "satellite" ? (
+            isOnline && satelliteSource === "live" ? (
+              <span>🛰️ Live Satellite Stream (Cached in Storage)</span>
+            ) : (
+              <span>
+                💾 Offline Mode: Using Stored Satellite Image
+                {cachedMeta?.dateString ? ` (Saved: ${cachedMeta.dateString})` : ""}
+              </span>
+            )
+          ) : (
+            <span>🌱 3D Himalayan Terrain Model (Offline Realistic)</span>
+          )}
         </span>
       </div>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSiteState } from "../state/SiteStateContext";
 import { api } from "../api/client";
 
@@ -21,6 +21,14 @@ export function SitePanel() {
   const [pendingBySite, setPendingBySite] = useState({});
   const [applying, setApplying] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  const debounceTimerRef = useRef(null);
+
+  // Clean up any pending timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
 
   if (!selectedSite) {
     return <div className="empty-state">Select a monitored station from the map or left list.</div>;
@@ -49,30 +57,63 @@ export function SitePanel() {
 
   function handleSlider(key, value) {
     const val = parseFloat(value);
+    const currentOverrides = pendingBySite[selectedSite] || {};
+    const nextOverrides = {
+      ...currentOverrides,
+      [key]: val,
+    };
+
+    // 1. Instantly update local state so the slider thumb and value badge update at 60fps
     setPendingBySite((prev) => ({
       ...prev,
-      [selectedSite]: {
-        ...(prev[selectedSite] || {}),
-        [key]: val,
-      },
+      [selectedSite]: nextOverrides,
     }));
+
+    // 2. Debounced live prediction directly to backend physics & ML models without needing to click Apply
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(async () => {
+      setApplying(true);
+      try {
+        await applyOverrides(selectedSite, nextOverrides);
+      } catch (err) {
+        console.error("Live predict failed:", err);
+      } finally {
+        setApplying(false);
+      }
+    }, 60);
+  }
+
+  async function handlePresetClick(presetOverrides) {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    setPendingBySite((prev) => ({
+      ...prev,
+      [selectedSite]: { ...presetOverrides },
+    }));
+    setApplying(true);
+    try {
+      await applyOverrides(selectedSite, presetOverrides);
+    } catch (err) {
+      console.error("Failed to apply preset:", err);
+    } finally {
+      setApplying(false);
+    }
   }
 
   async function applyChanges(overridesToApply) {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     setApplying(true);
     try {
       await applyOverrides(selectedSite, overridesToApply);
-      setPendingBySite((prev) => {
-        const next = { ...prev };
-        delete next[selectedSite];
-        return next;
-      });
     } finally {
       setApplying(false);
     }
   }
 
   async function handleReset() {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     setApplying(true);
     try {
       await resetSite(selectedSite);
@@ -81,6 +122,8 @@ export function SitePanel() {
         delete next[selectedSite];
         return next;
       });
+    } catch (err) {
+      console.error("Failed to reset site:", err);
     } finally {
       setApplying(false);
     }
@@ -252,7 +295,9 @@ export function SitePanel() {
       <div className="panel-section">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 14.5 }}>Geotechnical &amp; Rainfall Sliders</h3>
-          <span style={{ fontSize: 11, color: "var(--ink-muted)" }}>Live parameter override</span>
+          <span style={{ fontSize: 11.5, color: applying ? "#d97706" : "#16a34a", fontWeight: 700 }}>
+            {applying ? "⚡ Recalculating live…" : "⚡ Live Dynamic Prediction"}
+          </span>
         </div>
 
         {/* Quick Presets */}
@@ -262,7 +307,7 @@ export function SitePanel() {
               key={key}
               className="preset-btn"
               disabled={applying}
-              onClick={() => applyChanges(preset.overrides)}
+              onClick={() => handlePresetClick(preset.overrides)}
             >
               {preset.label}
             </button>
@@ -289,16 +334,29 @@ export function SitePanel() {
           </div>
         ))}
 
-        <div className="btn-row" style={{ marginTop: 16 }}>
+        <div className="btn-row" style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: applying ? "#d97706" : "#16a34a", fontWeight: 600 }}>
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: applying ? "#d97706" : "#16a34a",
+                boxShadow: applying ? "0 0 6px #d97706" : "0 0 6px #16a34a",
+                transition: "all 0.2s ease",
+              }}
+            />
+            <span>{applying ? "Calculating live prediction…" : "Live Auto-Prediction Active"}</span>
+          </div>
+
           <button
-            className="btn btn-primary"
-            disabled={applying || Object.keys(pendingOverrides).length === 0}
-            onClick={() => applyChanges(pendingOverrides)}
+            className="btn btn-sm btn-outline"
+            disabled={applying}
+            onClick={handleReset}
+            title="Reset site parameters back to original baseline"
           >
-            {applying ? "Calculating…" : "Apply & predict"}
-          </button>
-          <button className="btn" disabled={applying} onClick={handleReset}>
-            Reset to baseline
+            🔄 Reset to baseline
           </button>
         </div>
       </div>

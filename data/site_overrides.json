@@ -1,10 +1,4 @@
 {
-  "LOC02": {
-    "rainfall_1h_mm": 35,
-    "rainfall_24h_mm": 240,
-    "initial_saturation_0_1": 0.85,
-    "cohesion_kpa": 12.0
-  },
   "LOC03": {
     "rainfall_1h_mm": 0.0,
     "rainfall_24h_mm": 0.5,
@@ -22,8 +16,8 @@
     "initial_saturation_0_1": 0.15
   },
   "LOC06": {
-    "rainfall_1h_mm": 0.0,
-    "rainfall_24h_mm": 1.0,
+    "rainfall_1h_mm": 32.5,
+    "rainfall_24h_mm": 262,
     "initial_saturation_0_1": 0.16,
     "cohesion_kpa": 12.0
   }
