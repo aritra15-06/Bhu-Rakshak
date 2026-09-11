@@ -245,7 +245,7 @@ export function AlertsPanel() {
       setTestRecipientName(first.name);
       setTestRecipientPhone(first.phone_number);
       setTestRecipientTown(first.town || "North Sikkim Sector");
-      setTestCustomMessage(`🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for ${first.name}. Landslide early warning telemetry operating normally.`);
+      setTestCustomMessage(`🚨 BHU-RAKSHAK CITIZEN ALERT: There is an 80% probability of a landslide in the road connecting NH-10 North Sikkim Highway. Action: Test broadcast for ${first.name} — system verified, no action required.`);
     }
   }
 
@@ -276,14 +276,14 @@ export function AlertsPanel() {
       setTestRecipientName("");
       setTestRecipientPhone("");
       setTestRecipientTown("North Sikkim Sector");
-      setTestCustomMessage("🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified. Landslide early warning telemetry operating normally.");
+      setTestCustomMessage("🚨 BHU-RAKSHAK CITIZEN ALERT: There is an 80% probability of a landslide in the road connecting NH-10 North Sikkim Highway. Action: Test broadcast — system verified, no action required.");
     } else {
       const found = contacts.find((c) => c.contact_id === cId);
       if (found) {
         setTestRecipientName(found.name);
         setTestRecipientPhone(found.phone_number);
         setTestRecipientTown(found.town || "North Sikkim Sector");
-        setTestCustomMessage(`🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for ${found.name} at ${found.town || "North Sikkim"}. Landslide telemetry active.`);
+        setTestCustomMessage(`🚨 BHU-RAKSHAK CITIZEN ALERT: There is an 80% probability of a landslide in the road connecting NH-10 North Sikkim Highway. Action: Test broadcast for ${found.name} at ${found.town || "North Sikkim"} — system verified, no action required.`);
       }
     }
   }

@@ -9,6 +9,22 @@ import {
 const CORE_REGIONS = ["LOC01", "LOC02", "LOC03"];
 const ALL_ZONES = ["LOC01", "LOC02", "LOC03", "LOC04", "LOC05", "LOC06"];
 
+export const LOCATION_ROAD_NAMES = {
+  LOC01: "NH-10 North Sikkim Highway (Mangan-Chungthang)",
+  LOC02: "NH-10 Teesta Valley Highway (Mangan-Dikchu)",
+  LOC03: "SH-1 Chungthang-Lachung Highway Corridor",
+  LOC04: "SH-2 Chungthang-Lachen Highway Corridor",
+  LOC05: "NH-10 Highway Corridor (Singtam-Rangpo)",
+  LOC06: "Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula)",
+};
+
+export function getRoadName(locId, siteData) {
+  if (siteData?.spatial_context?.primary_road_corridor) {
+    return siteData.spatial_context.primary_road_corridor;
+  }
+  return LOCATION_ROAD_NAMES[locId] || siteData?.name || "Mountain Highway Corridor";
+}
+
 export function SimulationWorkspace() {
   const [showPeople, setShowPeople] = useState(true);
   const [showInfrastructure, setShowInfrastructure] = useState(false);
@@ -179,15 +195,22 @@ export function SimulationWorkspace() {
         if (!triggeredAlertsRef.current.has(episodeKey)) {
           triggeredAlertsRef.current.add(episodeKey);
 
+          const roadName = getRoadName(locId, r);
+          const prob = Math.round(r.probability_percent);
+          const alertMessage = `There is a ${prob}% probability of a landslide in the road connecting ${roadName}.`;
+          const actionDirective = "Immediate action required: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on this road.";
+
           // 1. Trigger on-screen Notification Popup Toast
           setSimAlertToast({
             id: `${locId}_${Date.now()}`,
             locationId: locId,
             name: r.name,
+            roadName: roadName,
             day: dayOfYear,
             dateString: dateInfo.dateString,
-            probability: r.probability_percent,
-            fos: r.factor_of_safety?.toFixed(2),
+            probability: prob,
+            alertMessage: alertMessage,
+            actionDirective: actionDirective,
             severity: r.severity_band || "CATASTROPHIC_POTENTIAL",
             statusText: r.statusText,
             roadBlocked: r.roadBlocked,
@@ -225,7 +248,7 @@ export function SimulationWorkspace() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="pulse-danger-dot" style={{ width: 10, height: 10 }} />
               <span style={{ fontWeight: 800, color: "#991b1b", fontSize: 13, letterSpacing: "0.5px" }}>
-                🚨 AUTOMATIC EMERGENCY WARNING ISSUED
+                🚨 EMERGENCY CITIZEN WARNING
               </span>
             </div>
             <button
@@ -237,18 +260,20 @@ export function SimulationWorkspace() {
             </button>
           </div>
           <div className="sim-toast-body">
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
-              📍 {simAlertToast.name} ({simAlertToast.locationId})
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>
+              📍 {simAlertToast.name} · {simAlertToast.roadName}
             </div>
-            <div style={{ fontSize: 12.5, color: "#7f1d1d", lineHeight: 1.45, marginBottom: 8 }}>
-              ⚠️ <strong>Landslide Probability Surge: {simAlertToast.probability}%</strong>.
-              Factor of Safety dropped to <strong>{simAlertToast.fos}</strong> (Critical Slope Deformation).
+            <div style={{ fontSize: 13, color: "#7f1d1d", lineHeight: 1.45, marginBottom: 8, fontWeight: 700, background: "#fee2e2", padding: "8px 10px", borderRadius: 6, border: "1px solid #fca5a5" }}>
+              📢 {simAlertToast.alertMessage}
               {simAlertToast.roadBlocked ? " Connecting highway corridor is SEVERED by debris." : ""}
+            </div>
+            <div style={{ fontSize: 12, color: "#1e293b", lineHeight: 1.45, marginBottom: 8, background: "#f8fafc", padding: "8px 10px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
+              👉 <strong>Citizen Directive:</strong> {simAlertToast.actionDirective}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, fontSize: 11.5, color: "#64748b" }}>
               <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/365</span>
               <span style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-                📱 SMS Auto-Dispatched to Citizens & PWD Control
+                📱 Citizen SMS Broadcast Auto-Dispatched
               </span>
             </div>
           </div>
@@ -433,19 +458,24 @@ export function SimulationWorkspace() {
             <div className="sim-tracker-items">
               {severeRegionsList.map((locId) => {
                 const r = activeSimSites[locId];
+                const roadName = getRoadName(locId, r);
+                const prob = Math.round(r.probability_percent);
                 return (
                   <div key={locId} className="sim-tracker-row">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <strong style={{ color: "#b91c1c", fontSize: 12.5 }}>📍 {r.name} ({locId})</strong>
-                      <span className="sim-tracker-stat-pill">
-                        FoS: <strong>{r.factor_of_safety?.toFixed(2)}</strong> · {r.probability_percent}% Prob
+                      <strong style={{ color: "#b91c1c", fontSize: 12.5 }}>📍 {r.name}</strong>
+                      <span className="sim-tracker-stat-pill" style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}>
+                        <strong>{prob}% Probability</strong>
                       </span>
                     </div>
-                    <div style={{ fontSize: 11.5, color: "#475569", marginTop: 3 }}>
-                      {r.statusText || "Critical slope failure active"} {r.roadBlocked && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 🛑 Highway Corridor Blocked</span>}
+                    <div style={{ fontSize: 12, color: "#991b1b", marginTop: 4, fontWeight: 600, lineHeight: 1.4 }}>
+                      📢 There is a {prob}% probability of a landslide in the road connecting {roadName}.
                     </div>
-                    <div className="sim-tracker-dispatch-status">
-                      <span>📡 Automated Early Warning SMS & Notification Dispatched</span>
+                    <div style={{ fontSize: 11.5, color: "#334155", marginTop: 3, background: "#f8fafc", padding: "4px 8px", borderRadius: 4, border: "1px solid #e2e8f0", lineHeight: 1.35 }}>
+                      👉 <strong>Action:</strong> Evacuate to designated relief shelters on higher ground. Avoid all vehicular travel on {roadName}.
+                    </div>
+                    <div className="sim-tracker-dispatch-status" style={{ marginTop: 4 }}>
+                      <span>📡 Automated Citizen Emergency SMS Dispatched</span>
                     </div>
                   </div>
                 );
@@ -582,8 +612,7 @@ export function SimulationWorkspace() {
                     }}
                   >
                     <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                      <span>FoS: <strong>{fos != null ? fos.toFixed(2) : "—"}</strong></span>
-                      <span>Prob: <strong>{probPercent}%</strong></span>
+                      <span>Landslide Risk: <strong>{probPercent}% Probability</strong></span>
                       <span>State: <strong style={{ color: sevClass.includes("critical") ? "#dc2626" : sevClass.includes("major") ? "#ea580c" : "#16a34a" }}>{stability}</strong></span>
                       {data.roadBlocked && (
                         <span style={{ color: "#dc2626", fontWeight: 700 }}>[ROUTE BLOCKED]</span>

@@ -47,6 +47,15 @@ function getSiteColor(data) {
   return STABILITY_FALLBACK[stability] || STABILITY_FALLBACK.UNKNOWN;
 }
 
+const LOCATION_ROAD_NAMES = {
+  LOC01: "NH-10 North Sikkim Highway (Mangan-Chungthang)",
+  LOC02: "NH-10 Teesta Valley Corridor (Gangtok-Mangan-Dikchu)",
+  LOC03: "SH-1 Chungthang-Lachung Highway Corridor",
+  LOC04: "SH-2 Chungthang-Lachen Highway Corridor",
+  LOC05: "NH-10 Teesta Corridor (Singtam-Rangpo)",
+  LOC06: "Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula)",
+};
+
 export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, showPeople = true, showInfrastructure = false }) {
   const [mapLayer, setMapLayer] = useState("streets");
   const entries = Object.entries(sites);
@@ -61,10 +70,11 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
     const stability = nearSite?.prediction?.physics_output?.stability_state || nearSite?.stability_state || "STABLE";
     const sevBand = nearSite?.severity?.severity_band || nearSite?.severity_band || "MINOR";
     const fos = nearSite?.prediction?.physics_output?.factor_of_safety ?? nearSite?.factor_of_safety;
+    const prob = Math.round(nearSite?.probability_percent ?? (nearSite?.calibrated_probability != null ? nearSite.calibrated_probability * 100 : 80));
     const spatial = nearSite?.spatial_context || {};
     const affectedVillages = spatial.affected_villages || [];
     const nearestTown = spatial.nearest_town;
-    const roadName = spatial.primary_road_corridor || spatial.nearest_road?.name || nearSite?.current_params?.name || nearSite?.name || "Mountain Highway";
+    const roadName = spatial.primary_road_corridor || spatial.nearest_road?.name || LOCATION_ROAD_NAMES[citizen.nearLocationId] || nearSite?.current_params?.name || nearSite?.name || "Mountain Highway";
     const siteParams = nearSite?.current_params || nearSite;
 
     if (stability === "UNSTABLE" || sevBand === "CATASTROPHIC_POTENTIAL" || (fos != null && fos < 1.0)) {
@@ -84,28 +94,28 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
         return {
           badge: "🚨 URGENT EVACUATION",
           color: "#dc2626",
-          alertText: `HIGH HAZARD: Immediate landslide failure on ${roadName}. Evacuate to reinforced emergency shelter.`,
+          alertText: `There is a ${prob}% probability of a landslide in the road connecting ${roadName}. Immediate action: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on ${roadName}.`,
           isDanger: true,
         };
       }
       return {
         badge: "⚠️ TRANSIT DETOUR ADVISORY",
         color: "#ea580c",
-        alertText: `CORRIDOR SEVERED: Road sector at ${citizen.nearLocationId} is blocked. Seek alternative route.`,
+        alertText: `There is a ${prob}% probability of active landslide blockages in the road connecting ${roadName}. Immediate action: Highway is blocked. Divert immediately to designated alternate bypass routes.`,
         isDanger: false,
       };
     } else if (stability === "MARGINAL" || sevBand === "MODERATE" || (fos != null && fos < 1.3)) {
       return {
         badge: "🟡 PREPARE & MONITOR",
         color: "#d97706",
-        alertText: `ADVISORY: Saturation rising along ${roadName}. Avoid traveling near steep rock cuts.`,
+        alertText: `There is a ${prob}% probability of a landslide in the road connecting ${roadName}. Action: Stay on high alert, prepare emergency go-bags, and avoid travel near steep hill cuts.`,
         isDanger: false,
       };
     }
     return {
       badge: "🟢 SAFE CONDITION",
       color: "#16a34a",
-      alertText: `NOMINAL: Slope equilibrium normal. Open transit permitted.`,
+      alertText: `Landslide risk is low (${prob}% probability) along the road connecting ${roadName}. Road open; proceed with caution during rain.`,
       isDanger: false,
     };
   }
@@ -146,10 +156,10 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
       {/* Map Severity Legend */}
       <div className="map-floating-legend">
         <div className="legend-title">Simulation Hazard State</div>
-        <div className="legend-item"><span className="legend-dot critical" /> Critical (FoS &lt; 0.9)</div>
-        <div className="legend-item"><span className="legend-dot major" /> Major Warning (FoS &lt; 1.0)</div>
-        <div className="legend-item"><span className="legend-dot moderate" /> Moderate (FoS &lt; 1.3)</div>
-        <div className="legend-item"><span className="legend-dot stable" /> Stable (FoS &ge; 1.5)</div>
+        <div className="legend-item"><span className="legend-dot critical" /> Critical Hazard (Risk &gt; 75%)</div>
+        <div className="legend-item"><span className="legend-dot major" /> Major Warning (Risk &gt; 50%)</div>
+        <div className="legend-item"><span className="legend-dot moderate" /> Moderate Advisory (Risk &gt; 25%)</div>
+        <div className="legend-item"><span className="legend-dot stable" /> Stable (Low Risk &lt; 10%)</div>
         {showInfrastructure && (
           <>
             <div className="legend-item" style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid #e2e8f0" }}>
@@ -288,13 +298,21 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
                 eventHandlers={{ click: () => onSelectSite && onSelectSite(locationId) }}
               >
                 <Popup>
-                  <div style={{ fontSize: 13, lineHeight: 1.4 }}>
-                    <strong>🏔️ {params.name}</strong><br />
-                    <span style={{ color: "#64748b" }}>{locationId} · Elevation {params.elevation_m}m</span><br />
-                    <div style={{ marginTop: 6 }}>
-                      <span>Stability: <strong>{stability}</strong></span><br />
-                      <span>Factor of Safety: <strong>{fos != null ? fos.toFixed(2) : "—"}</strong></span><br />
-                      <span>Severity: <strong style={{ color }}>{sevBand}</strong></span>
+                  <div style={{ fontSize: 13, lineHeight: 1.45, minWidth: 230 }}>
+                    <strong style={{ fontSize: 13.5 }}>🏔️ {params.name}</strong><br />
+                    <span style={{ color: "#64748b", fontSize: 11.5 }}>{locationId} · Elevation {params.elevation_m}m</span><br />
+                    <div style={{ marginTop: 6, fontSize: 12 }}>
+                      <span>Landslide Risk: <strong style={{ color }}>{Math.round(data?.probability_percent ?? (data?.calibrated_probability != null ? data.calibrated_probability * 100 : 80))}% Probability ({stability})</strong></span><br />
+                      <span>Connecting Highway: <strong>{data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}</strong></span>
+                    </div>
+                    <div style={{ marginTop: 6, padding: "6px 8px", background: isUnstable ? "#fef2f2" : "#f8fafc", borderRadius: 6, border: `1px solid ${isUnstable ? "#fca5a5" : "#e2e8f0"}`, fontSize: 11.5, color: isUnstable ? "#991b1b" : "#334155" }}>
+                      📢 There is a {Math.round(data?.probability_percent ?? 80)}% probability of a landslide in the road connecting {data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}.
+                      <div style={{ marginTop: 3, fontWeight: 600 }}>
+                        👉 {isUnstable ? "Immediate action: Evacuate to relief shelters. Avoid road transit." : isMarginal ? "Action: Stay on high alert, prepare emergency go-bags." : "Status: Nominal landscape equilibrium."}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 10.5, color: "#94a3b8" }}>
+                      Admin Geotechnical Telemetry: FoS {fos != null ? fos.toFixed(2) : "—"} · Severity {sevBand}
                     </div>
                   </div>
                 </Popup>

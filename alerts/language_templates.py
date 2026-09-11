@@ -9,32 +9,32 @@ DEFAULT_LANGUAGE = "en"
 
 TEMPLATES = {
     "EVACUATE_NOW": {
-        "en": "URGENT EVACUATION [{danger_level} HAZARD]: Landslide expected on {road_corridor} near {landmark} ({site}). Please evacuate immediately to safe ground.",
-        "hi": "अत्यावश्यक निकासी [{danger_level} खतरा]: {landmark} ({site}) के पास {road_corridor} पर भूस्खलन की संभावना है। कृपया तुरंत सुरक्षित स्थान पर जाएँ।",
-        "ne": "अति आवश्यक खाली गर्नुहोस् [{danger_level} जोखिम]: {landmark} ({site}) नजिक {road_corridor} मा पहिरो जाने सम्भावना छ। कृपया तुरुन्त सुरक्षित ठाउँमा सर्नुहोस्।",
-        "bn": "জরুরি উচ্ছেদ [{danger_level} ঝুঁকি]: {landmark} ({site}) এর কাছে {road_corridor} এ ভূমিধসের শঙ্কা রয়েছে। অনুগ্রহ করে অবিলম্বে নিরাপদ স্থানে চলে যান।",
-        "mr": "तातडीने स्थलांतर करा [{danger_level} धोका]: {landmark} ({site}) जवळ {road_corridor} वर दरड कोसळण्याचा धोका आहे. कृपया ताबडतोब सुरक्षित स्थळी जा.",
+        "en": "🚨 URGENT EVACUATION: There is a {prob}% probability of a landslide in the road connecting {road_corridor}. Immediate action: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on {road_corridor}.",
+        "hi": "🚨 अत्यावश्यक निकासी: {road_corridor} को जोड़ने वाली सड़क पर भूस्खलन की {prob}% संभावना है। तत्काल कार्रवाई: तुरंत ऊंचे स्थानों पर बने राहत शिविरों में जाएं। इस सड़क पर सभी वाहन यात्रा से बचें।",
+        "ne": "🚨 अति आवश्यक खाली गर्नुहोस्: {road_corridor} जोड्ने सडकमा पहिरोको {prob}% सम्भावना छ। तत्काल कार्य: तुरुन्तै माथिल्लो क्षेत्रका सुरक्षित आश्रयस्थलमा सर्नुहोस्। यस सडकमा यात्रा नगर्नुहोस्।",
+        "bn": "🚨 জরুরি উচ্ছেদ: {road_corridor} সংযোগকারী সড়কে ভূমিধসের {prob}% সম্ভাবনা রয়েছে। তাৎক্ষণিক করণীয়: অবিলম্বে উঁচু স্থানের আশ্রয়কেন্দ्रे চলে যান। এই সড়কে সব ধরনের যান চলাচল বন্ধ রাখুন।",
+        "mr": "🚨 तातडीने स्थलांतर करा: {road_corridor} ला जोडणाऱ्या रस्त्यावर दरड कोसळण्याची {prob}% शक्यता आहे. त्वरित कृती: ताबडतोब सुरक्षित किंवा उंच ठिकाणी जा. या रस्त्यावरील प्रवास पूर्णपणे टाळा.",
     },
     "PREPARE": {
-        "en": "WARNING [{danger_level} HAZARD]: Elevated landslide risk on {road_corridor} near {landmark} ({site}). Keep emergency supplies ready and avoid travelling on this route.",
-        "hi": "चेतावनी [{danger_level} खतरा]: {landmark} ({site}) के पास {road_corridor} पर भूस्खलन का खतरा बढ़ा है। कृपया आपातकालीन सामग्री तैयार रखें।",
-        "ne": "चेतावनी [{danger_level} जोखिम]: {landmark} ({site}) नजिक {road_corridor} मा पहिरोको जोखिम बढेको छ। कृपया सजग रहनुहोस्।",
-        "bn": "সতর্কতা [{danger_level} ঝুঁকি]: {landmark} ({site}) এর কাছে {road_corridor} এ ভূমিধসের ঝুঁকি বেড়েছে। প্রস্তুত থাকুন।",
-        "mr": "इशारा [{danger_level} धोका]: {landmark} ({site}) जवळ {road_corridor} वर दरड कोसळण्याची शक्यता वाढली आहे. आपत्कालीन साहित्य तयार ठेवा.",
+        "en": "⚠️ LANDSLIDE WARNING: There is a {prob}% probability of a landslide in the road connecting {road_corridor}. Action required: Stay on high alert, prepare emergency go-bags, and avoid unnecessary transit near steep slopes.",
+        "hi": "⚠️ भूस्खलन चेतावनी: {road_corridor} को जोड़ने वाली सड़क पर भूस्खलन की {prob}% संभावना है। आवश्यक कार्रवाई: सतर्क रहें, आपातकालीन किट तैयार रखें और ढलानों के पास यात्रा से बचें।",
+        "ne": "⚠️ पहिरो चेतावनी: {road_corridor} जोड्ने सडकमा पहिरोको {prob}% सम्भावना छ। आवश्यक कार्य: उच्च सतर्कता अपनाउनुहोस्, आपतकालीन झोला तयार राख्नुहोस् र भीर नजिक नजानुहोस्।",
+        "bn": "⚠️ ভূমিধস সতর্কতা: {road_corridor} সংযোগকারী সড়কে ভূমিধসের {prob}% সম্ভাবনা রয়েছে। করণীয়: সর্বোচ্চ সতর্ক থাকুন, জরুরি ব্যাগ প্রস্তুত রাখুন এবং খাড়া পাহাড়ের কাছে যাওয়া এড়িয়ে চলুন।",
+        "mr": "⚠️ दरड इशारा: {road_corridor} ला जोडणाऱ्या रस्त्यावर दरड कोसळण्याची {prob}% शक्यता आहे. आवश्यक कृती: सतर्क राहा, आपत्कालीन साहित्य तयार ठेवा आणि उताराजवळील प्रवास टाळा.",
     },
     "ADVISORY": {
-        "en": "ADVISORY [{danger_level} HAZARD]: Landslide risk monitoring active on {road_corridor} near {landmark} ({site}). Stay informed of weather and road status.",
-        "hi": "सूचना [{danger_level} खतरा]: {landmark} ({site}) के पास {road_corridor} पर भूस्खलन निगरानी सक्रिय है। मौसम और सड़क की जानकारी रखें।",
-        "ne": "जानकारी [{danger_level} जोखिम]: {landmark} ({site}) नजिक {road_corridor} मा पहिरो निगरानी सक्रिय छ।",
-        "bn": "পরামর্শ [{danger_level} ঝুঁকি]: {landmark} ({site}) এর কাছে {road_corridor} এ পরিস্থিতি পর্যবেক্ষণে রয়েছে।",
-        "mr": "सूचना [{danger_level} धोका]: {landmark} ({site}) जवळ {road_corridor} वर परिस्थितीवर लक्ष ठेवले जात आहे.",
+        "en": "📢 LANDSLIDE ADVISORY: Monitoring indicates a {prob}% probability of slope movement along the road connecting {road_corridor}. Action required: Monitor official advisories and exercise caution while driving.",
+        "hi": "📢 भूस्खलन सलाह: {road_corridor} को जोड़ने वाली सड़क पर भूस्खलन की {prob}% संभावना है। आवश्यक कार्रवाई: मौसम की स्थिति पर नजर रखें और सावधानीपूर्वक यात्रा करें।",
+        "ne": "📢 पहिरो सल्लाह: {road_corridor} जोड्ने सडकमा {prob}% पहिरोको जोखिम छ। आवश्यक कार्य: मौसमको जानकारी राख्नुहोस् र यात्रा गर्दा सावधानी अपनाउनुहोस्।",
+        "bn": "📢 ভূমিধস পরামর্শ: {road_corridor} সংযোগকারী সড়কে {prob}% ভূমিধসের ঝুঁকি রয়েছে। করণীয়: আবহাওয়ার খবরে নজর রাখুন এবং চলাচলে সতর্কতা অবলম্বন করুন।",
+        "mr": "📢 दरड सल्ला: {road_corridor} ला जोडणाऱ्या रस्त्यावर हालचालींची {prob}% शक्यता आहे. आवश्यक कृती: अधिकृत माहितीचे अनुसरण करा आणि सावधगिरी बाळगा.",
     },
     "TRANSIT_DETOUR_ADVISORY": {
-        "en": "ROUTE DETOUR ADVISORY: Corridor along {road_corridor} near {landmark} ({site}) is BLOCKED due to {danger_level}. Please avoid this highway and use alternate mountain routes.",
-        "hi": "मार्ग परिवर्तन सलाह: सक्रिय {danger_level} के कारण {landmark} ({site}) के पास {road_corridor} बंद है। कृपया इस राजमार्ग से बचें और वैकल्पिक मार्ग अपनाएँ।",
-        "ne": "सडक डाईभर्सन सूचना: सक्रिय {danger_level} को कारण {landmark} ({site}) नजिक {road_corridor} बन्द छ। कृपया वैकल्पिक बाटो प्रयोग गर्नुहोस्।",
-        "bn": "রুট ডাইভারশন সতর্কতা: সক্রিয় {danger_level} এর কারণে {landmark} ({site}) সংলগ্ন {road_corridor} অবরুদ্ধ। অনুগ্রহ করে এই পথ এড়িয়ে বিকল্প পথ ব্যবহার করুন।",
-        "mr": "पर्यायी मार्ग सल्ला: {landmark} ({site}) जवळ {road_corridor} वर {danger_level} मुळे रस्ता बंद आहे. कृपया पर्यायी मार्गाचा अवलंब करा.",
+        "en": "🛑 ROUTE CLOSED: There is a {prob}% probability of active landslide blockages in the road connecting {road_corridor}. Action required: Do not attempt to cross. Divert immediately to designated alternate bypass routes.",
+        "hi": "🛑 मार्ग बंद: {road_corridor} को जोड़ने वाली सड़क पर सक्रिय भूस्खलन की {prob}% संभावना है। आवश्यक कार्रवाई: आगे बढ़ने का प्रयास न करें। तुरंत वैकल्पिक मार्ग अपनाएं।",
+        "ne": "🛑 बाटो बन्द: {road_corridor} जोड्ने सडकमा सक्रिय पहिरोको {prob}% सम्भावना छ। आवश्यक कार्य: अगाडि बढ्ने प्रयास नगर्नुहोस्। तुरुन्तै वैकल्पिक बाटो प्रयोग गर्नुहोस्।",
+        "bn": "🛑 রাস্তা বন্ধ: {road_corridor} সংযোগকারী সড়কে সক্রিয় ভূমিধসের {prob}% সম্ভাবনা রয়েছে। করণীয়: অগ্রসর হওয়ার চেষ্টা করবেন না। অবিলম্বে বিকল্প পথ ব্যবহার করুন।",
+        "mr": "🛑 रस्ता बंद: {road_corridor} ला जोडणाऱ्या रस्त्यावर सक्रिय दरडीची {prob}% शक्यता आहे. आवश्यक कृती: पुढे जाऊ नका. ताबडतोब पर्यायी मार्ग वापरा.",
     },
 }
 
@@ -46,6 +46,7 @@ def get_message(
     danger_level: str = "MODERATE",
     road_corridor: str = "Local Route Corridor",
     landmark: str = "Nearby Slope",
+    probability: int = 80,
 ) -> str:
     lang = language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
     template = TEMPLATES.get(tier, TEMPLATES["ADVISORY"]).get(lang, TEMPLATES[tier][DEFAULT_LANGUAGE])
@@ -54,4 +55,5 @@ def get_message(
         danger_level=danger_level,
         road_corridor=road_corridor,
         landmark=landmark,
+        prob=int(probability) if probability is not None else 80,
     )

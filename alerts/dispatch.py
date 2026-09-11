@@ -106,6 +106,7 @@ def run_alert_cycle(
             danger_level=danger_level,
             road_corridor=road_corridor,
             landmark=landmark,
+            probability=round(calibrated_p * 100) if calibrated_p is not None else 80,
         )
         send_result = send_sms(contact["phone_number"], message, dry_run=dry_run)
         recipients.append({
