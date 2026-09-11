@@ -1,6 +1,6 @@
 {
-  "active_profile": "operations",
-  "version_number": 1,
-  "description": "Operations Mode (Alerts & Settings)",
+  "active_profile": "history",
+  "version_number": 2,
+  "description": "Public Monitoring Mode (Alert & Landslide History)",
   "default_on_boot": "operations"
 }

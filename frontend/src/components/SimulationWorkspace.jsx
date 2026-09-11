@@ -4,6 +4,7 @@ import {
   getDailySimulationState,
   getCalendarDate,
   getSeason,
+  TOTAL_SIMULATION_DAYS,
 } from "../data/annualSimulationTimeline";
 
 const CORE_REGIONS = ["LOC01", "LOC02", "LOC03"];
@@ -15,10 +16,13 @@ export const LOCATION_ROAD_NAMES = {
   LOC03: "SH-1 Chungthang-Lachung Highway Corridor",
   LOC04: "SH-2 Chungthang-Lachen Highway Corridor",
   LOC05: "NH-10 Highway Corridor (Singtam-Rangpo)",
-  LOC06: "Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula)",
+  LOC06: "NH-10 Highway Corridor (Mangan Ridge Cut)",
 };
 
 export function getRoadName(locId, siteData) {
+  if (siteData?.primary_road_corridor) {
+    return siteData.primary_road_corridor;
+  }
   if (siteData?.spatial_context?.primary_road_corridor) {
     return siteData.spatial_context.primary_road_corridor;
   }
@@ -34,6 +38,12 @@ export function SimulationWorkspace() {
   const [simAlertToast, setSimAlertToast] = useState(null);
   const triggeredAlertsRef = useRef(new Set());
 
+  // Custom User-Added Locations & Map Location Picker State
+  const [customSites, setCustomSites] = useState({});
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [pickingLoading, setPickingLoading] = useState(false);
+  const [customFeedbackToast, setCustomFeedbackToast] = useState(null);
+
   function toggleRegion(locId) {
     setExpandedRegions((prev) => ({
       ...prev,
@@ -41,80 +51,27 @@ export function SimulationWorkspace() {
     }));
   }
 
-  // 1-Year (365 Days) Accelerated Continuous Simulation Engine
-  // 60 seconds duration at 1x = 60000ms / 365 ≈ 164ms per day
+  // High-Impact Monsoon Simulation Engine (June to October: 153 Days)
+  // ~45 seconds for the full 153-day crisis at 1x
   const [dayOfYear, setDayOfYear] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1); // 0.25x, 0.5x, 1x, 2x, 3x
   const [isControlsExpanded, setIsControlsExpanded] = useState(true);
   const timerRef = useRef(null);
 
-  // Active state derived from current day in annual simulation timeline
-  const annualFrame = getDailySimulationState(dayOfYear);
+  // Active state derived from current day in monsoon simulation timeline
+  const annualFrame = getDailySimulationState(dayOfYear, customSites);
   const dateInfo = getCalendarDate(dayOfYear);
   const seasonInfo = getSeason(dayOfYear);
 
   // Active sites object passed to the map and cards
-  // Fallback for auxiliary zones LOC04-06 if 6-zone view selected
   const activeSimSites = {
     ...annualFrame.regions,
-    LOC04: {
-      location_id: "LOC04",
-      name: "Chungthang-Lachen Highway Cut",
-      elevation_m: 2050,
-      slope_deg: 46,
-      rainfall_1h_mm: annualFrame.regions.LOC01.rainfall_1h_mm,
-      rainfall_24h_mm: annualFrame.regions.LOC01.rainfall_24h_mm,
-      initial_saturation_0_1: annualFrame.regions.LOC01.initial_saturation_0_1,
-      factor_of_safety: Math.max(0.80, annualFrame.regions.LOC01.factor_of_safety - 0.05),
-      calibrated_probability: annualFrame.regions.LOC01.calibrated_probability,
-      probability_percent: annualFrame.regions.LOC01.probability_percent,
-      stability_state: annualFrame.regions.LOC01.stability_state,
-      severity_band: annualFrame.regions.LOC01.severity_band,
-      statusText: annualFrame.regions.LOC01.statusText,
-      roadBlocked: annualFrame.regions.LOC01.roadBlocked,
-      latitude: 27.6250,
-      longitude: 88.6100,
-    },
-    LOC05: {
-      location_id: "LOC05",
-      name: "Rangpo Teesta River Slope",
-      elevation_m: 650,
-      slope_deg: 22,
-      rainfall_1h_mm: Math.round(annualFrame.regions.LOC02.rainfall_1h_mm * 0.4 * 10) / 10,
-      rainfall_24h_mm: Math.round(annualFrame.regions.LOC02.rainfall_24h_mm * 0.4 * 10) / 10,
-      initial_saturation_0_1: 0.25,
-      factor_of_safety: 1.65,
-      calibrated_probability: 0.04,
-      probability_percent: 4.0,
-      stability_state: "STABLE",
-      severity_band: "MINOR",
-      statusText: "Stable Riverbank",
-      roadBlocked: false,
-      latitude: 27.1700,
-      longitude: 88.5300,
-    },
-    LOC06: {
-      location_id: "LOC06",
-      name: "Gangtok-Nathula Pass Highway",
-      elevation_m: 3850,
-      slope_deg: 38,
-      rainfall_1h_mm: Math.round(annualFrame.regions.LOC03.rainfall_1h_mm * 0.8 * 10) / 10,
-      rainfall_24h_mm: Math.round(annualFrame.regions.LOC03.rainfall_24h_mm * 0.8 * 10) / 10,
-      initial_saturation_0_1: 0.32,
-      factor_of_safety: 1.48,
-      calibrated_probability: 0.12,
-      probability_percent: 12.0,
-      stability_state: "STABLE",
-      severity_band: "MINOR",
-      statusText: "High Mountain Pass",
-      roadBlocked: false,
-      latitude: 27.3800,
-      longitude: 88.6600,
-    },
   };
 
-  const displayedList = regionFilter === "3" ? CORE_REGIONS : ALL_ZONES;
+  const displayedList = regionFilter === "3"
+    ? [...CORE_REGIONS, ...Object.keys(customSites)]
+    : [...ALL_ZONES, ...Object.keys(customSites)];
 
   // Active severe hazard regions for the dynamic live tracker
   const severeRegionsList = displayedList.filter((locId) => {
@@ -138,15 +95,15 @@ export function SimulationWorkspace() {
     else if (r?.severity_band === "MAJOR" || r?.stability_state === "MARGINAL") activeAmberCount++;
   });
 
-  // Playback timer loop supporting fractional speeds below 1x
+  // Playback timer loop supporting fractional speeds below 1x (~45s at 1x for 153 days)
   useEffect(() => {
     if (isPlaying) {
-      const intervalMs = Math.max(25, Math.round(164 / playbackSpeed));
+      const intervalMs = Math.max(30, Math.round(280 / playbackSpeed));
       timerRef.current = setInterval(() => {
         setDayOfYear((prev) => {
-          if (prev >= 365) {
+          if (prev >= TOTAL_SIMULATION_DAYS) {
             setIsPlaying(false);
-            return 365;
+            return TOTAL_SIMULATION_DAYS;
           }
           return prev + 1;
         });
@@ -160,7 +117,7 @@ export function SimulationWorkspace() {
   }, [isPlaying, playbackSpeed]);
 
   function handlePlayPause() {
-    if (dayOfYear >= 365) {
+    if (dayOfYear >= TOTAL_SIMULATION_DAYS) {
       setDayOfYear(1);
       setIsPlaying(true);
     } else {
@@ -177,6 +134,45 @@ export function SimulationWorkspace() {
 
   function handleScrub(e) {
     setDayOfYear(parseInt(e.target.value, 10));
+  }
+
+  function handleMapClick(lat, lon) {
+    if (!isPickingLocation) return;
+    setIsPickingLocation(false);
+    setPickingLoading(true);
+
+    fetch("/api/locations/custom-inspect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latitude: lat, longitude: lon }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data && data.location_id) {
+          setCustomSites((prev) => ({
+            ...prev,
+            [data.location_id]: data,
+          }));
+          setSelectedSite(data.location_id);
+          setCustomFeedbackToast({
+            title: "📍 Custom Monitoring Station Added!",
+            name: data.name,
+            road: data.primary_road_corridor,
+            elev: data.elevation_m,
+            slope: data.slope_deg,
+            prob: data.probability_percent,
+          });
+          setTimeout(() => setCustomFeedbackToast(null), 8000);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to inspect custom location:", err);
+        alert("Could not inspect location at this coordinate. Please try clicking another point on the map.");
+      })
+      .finally(() => setPickingLoading(false));
   }
 
   // Automated Alert Trigger & Emergency Toast Popup when Severity Surges
@@ -292,12 +288,45 @@ export function SimulationWorkspace() {
               👉 <strong>Citizen Directive:</strong> {simAlertToast.actionDirective}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, fontSize: 11.5, color: "#64748b" }}>
-              <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/365</span>
+              <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/{TOTAL_SIMULATION_DAYS}</span>
               <span style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
                 📱 Citizen SMS Broadcast Auto-Dispatched
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Custom Location Added Notification Toast */}
+      {customFeedbackToast && (
+        <div className="custom-loc-success-toast">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <strong style={{ color: "#1e1b4b", fontSize: 13 }}>{customFeedbackToast.title}</strong>
+            <button
+              className="sim-toast-close"
+              onClick={() => setCustomFeedbackToast(null)}
+              title="Close"
+              style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 14 }}
+            >
+              ✕
+            </button>
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#4338ca", marginBottom: 3 }}>
+            {customFeedbackToast.name}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#334155", lineHeight: 1.45 }}>
+            🛣️ Connecting Highway: <strong>{customFeedbackToast.road}</strong><br />
+            📐 Elevation: <strong>{customFeedbackToast.elev} m</strong> · Physics Slope: <strong>{customFeedbackToast.slope}°</strong><br />
+            📊 Simulated Monsoon Risk: <strong>{customFeedbackToast.prob}% Probability</strong>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Location GIS Loading Overlay */}
+      {pickingLoading && (
+        <div className="custom-loc-loading-toast">
+          <span className="spinner-mini" style={{ width: 14, height: 14, border: "2px solid #818cf8", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+          <span>Querying GIS topography, live DEM & connecting highways...</span>
         </div>
       )}
 
@@ -330,6 +359,19 @@ export function SimulationWorkspace() {
                     {showInfrastructure ? "Active" : "Hidden"}
                   </span>
                 </button>
+
+                <button
+                  className={`sim-custom-loc-btn ${isPickingLocation ? "active-picking" : ""}`}
+                  onClick={() => setIsPickingLocation(!isPickingLocation)}
+                  title="Click anywhere on the map in North Sikkim to inspect live DEM topography and add a custom monitoring site"
+                >
+                  <span>{isPickingLocation ? "🎯 Cancel Pin Picking" : "📍 Add Custom Location"}</span>
+                  {customSites && Object.keys(customSites).length > 0 && (
+                    <span className="sim-custom-count-badge">
+                      {Object.keys(customSites).length} Added
+                    </span>
+                  )}
+                </button>
               </div>
 
               <div className="sim-timeline-ctrl-strip">
@@ -338,12 +380,12 @@ export function SimulationWorkspace() {
                   onClick={handlePlayPause}
                   style={{ fontWeight: 700 }}
                 >
-                  {isPlaying ? "⏸️ Pause" : (dayOfYear >= 365 ? "🔄 Replay Year (60s)" : "▶️ Play Year Simulation (60s)")}
+                  {isPlaying ? "⏸️ Pause" : (dayOfYear >= TOTAL_SIMULATION_DAYS ? "🔄 Replay Monsoon (45s)" : "▶️ Play Monsoon Simulation (45s)")}
                 </button>
                 <button
                   className="btn btn-sm"
                   onClick={handleReplay}
-                  title="Reset and start 1-year replay from January 1"
+                  title="Reset and start monsoon replay from June 1"
                 >
                   🔄 Replay
                 </button>
@@ -387,12 +429,12 @@ export function SimulationWorkspace() {
               </div>
             </div>
 
-            {/* 1-Year Calendar HUD Banner */}
+            {/* Monsoon Calendar HUD Banner */}
             <div className="sim-calendar-hud-banner">
               <div className="sim-calendar-date-pill">
                 <span className="sim-calendar-icon">📅</span>
                 <strong>{dateInfo.dateString}</strong>
-                <span className="sim-calendar-day-count">(Day {dayOfYear}/365)</span>
+                <span className="sim-calendar-day-count">(Day {dayOfYear}/{TOTAL_SIMULATION_DAYS})</span>
               </div>
 
               <div className="sim-calendar-season-pill">
@@ -404,7 +446,7 @@ export function SimulationWorkspace() {
               {activeRedCount > 0 ? (
                 <div className="sim-active-hazard-pill danger">
                   <span className="pulse-danger-dot" />
-                  <span>🚨 LANDSLIDE ACTIVE ({activeRedCount} REGION)</span>
+                  <span>🚨 LANDSLIDE ACTIVE ({activeRedCount} REGION{activeRedCount > 1 ? "S" : ""})</span>
                 </div>
               ) : activeAmberCount > 0 ? (
                 <div className="sim-active-hazard-pill warning">
@@ -438,11 +480,11 @@ export function SimulationWorkspace() {
                 ▼
               </button>
               <span style={{ fontWeight: 700, color: "#1e293b", fontSize: 12.5 }}>
-                Simulation Controls (Minimized)
+                Monsoon Controls (Minimized)
               </span>
               <span style={{ color: "#64748b", fontSize: 12 }}>·</span>
               <span style={{ fontSize: 12, color: "#334155" }}>
-                📅 <strong>{dateInfo.dateString}</strong> (Day {dayOfYear}/365) · {seasonInfo.icon} {seasonInfo.name}
+                📅 <strong>{dateInfo.dateString}</strong> (Day {dayOfYear}/{TOTAL_SIMULATION_DAYS}) · {seasonInfo.icon} {seasonInfo.name}
               </span>
             </div>
 
@@ -467,23 +509,23 @@ export function SimulationWorkspace() {
           </div>
         )}
 
-        {/* Continuous Timeline Progress Bar & Interactive Scrubber (Slim Height) */}
+        {/* Continuous Monsoon Timeline Progress Bar & Interactive Scrubber (Slim Height) */}
         <div className="sim-timeline-slider-track">
           <input
             type="range"
             min={1}
-            max={365}
+            max={TOTAL_SIMULATION_DAYS}
             value={dayOfYear}
             onChange={handleScrub}
             className="sim-scrubber-range"
-            title="Drag to scrub directly to any day in the 365-day annual timeline"
+            title="Drag to scrub directly across the June-October monsoon timeline (153 Days)"
           />
           <div className="sim-timeline-month-ticks">
-            <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
-            <span style={{ color: "#dc2626", fontWeight: 700 }}>Jul ⚡</span>
-            <span style={{ color: "#dc2626", fontWeight: 700 }}>Aug ⚡</span>
-            <span style={{ color: "#ea580c", fontWeight: 700 }}>Sep ⛈️</span>
-            <span>Oct</span><span>Nov</span><span>Dec</span>
+            <span style={{ color: "#0284c7", fontWeight: 700 }}>Jun 🌧️ (Onset)</span>
+            <span style={{ color: "#dc2626", fontWeight: 700 }}>Jul ⚡ (Cloudburst)</span>
+            <span style={{ color: "#dc2626", fontWeight: 700 }}>Aug ⚡ (High Deluge)</span>
+            <span style={{ color: "#ea580c", fontWeight: 700 }}>Sep ⛈️ (Late Runoff)</span>
+            <span style={{ color: "#16a34a", fontWeight: 600 }}>Oct 🍂 (Seepage)</span>
           </div>
         </div>
 
@@ -495,6 +537,9 @@ export function SimulationWorkspace() {
             onSelectSite={setSelectedSite}
             showPeople={showPeople}
             showInfrastructure={showInfrastructure}
+            isPickingLocation={isPickingLocation}
+            onMapClick={handleMapClick}
+            onCancelPickLocation={() => setIsPickingLocation(false)}
           />
         </div>
       </div>
@@ -663,11 +708,20 @@ export function SimulationWorkspace() {
 
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="sim-region-index-pill">Region {idx + 1}</span>
+                        {data.is_custom ? (
+                          <span className="sim-region-index-pill custom-pill" style={{ background: "#7c3aed", color: "#ffffff", fontWeight: 700 }}>
+                            📍 CUSTOM
+                          </span>
+                        ) : (
+                          <span className="sim-region-index-pill">Region {idx + 1}</span>
+                        )}
                         <strong style={{ fontSize: 14 }}>{data.name}</strong>
                       </div>
                       <div style={{ fontSize: 11.5, color: "var(--ink-muted)", marginTop: 2 }}>
-                        <span>{locId}</span> · <span>Elevation {data.elevation_m}m</span> · <span>Calculated Slope {data.slope_deg}°</span>
+                        <span>{locId}</span> · <span>Elev {data.elevation_m}m</span> · <span>Slope {data.slope_deg}°</span>
+                        {data.primary_road_corridor && (
+                          <span> · <strong style={{ color: "#2563eb" }}>{data.primary_road_corridor}</strong></span>
+                        )}
                       </div>
                     </div>
                   </div>

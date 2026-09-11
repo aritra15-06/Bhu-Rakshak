@@ -1,8 +1,19 @@
 import { useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Marker, Polyline, Tooltip, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Marker, Polyline, Tooltip, Popup, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { MOCK_POPULATION, ROAD_CORRIDORS, SIKKIM_SETTLEMENTS } from "../data/mockPopulation";
 import "leaflet/dist/leaflet.css";
+
+function MapClickHandler({ isPickingLocation, onMapClick }) {
+  useMapEvents({
+    click(e) {
+      if (isPickingLocation && onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    },
+  });
+  return null;
+}
 
 const createHumanIcon = (status) => {
   const isEvac = status.isDanger;
@@ -56,7 +67,16 @@ const LOCATION_ROAD_NAMES = {
   LOC06: "Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula)",
 };
 
-export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, showPeople = true, showInfrastructure = false }) {
+export function SimulationMapView({
+  sites = {},
+  selectedSite,
+  onSelectSite,
+  showPeople = true,
+  showInfrastructure = false,
+  isPickingLocation = false,
+  onMapClick,
+  onCancelPickLocation,
+}) {
   const [mapLayer, setMapLayer] = useState("streets");
   const entries = Object.entries(sites);
   const firstData = entries[0]?.[1];
@@ -129,6 +149,24 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Interactive Location Picking Active Banner */}
+      {isPickingLocation && (
+        <div className="sim-map-picking-banner">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="pulse-danger-dot" style={{ background: "#8b5cf6", boxShadow: "0 0 0 5px rgba(139, 92, 246, 0.4)" }} />
+            <span>📍 <strong>Location Picker Active:</strong> Click anywhere on the map in Sikkim to inspect and place a custom monitoring station.</span>
+          </div>
+          <button
+            type="button"
+            className="sim-map-picking-cancel-btn"
+            onClick={onCancelPickLocation}
+            title="Cancel location selection"
+          >
+            ✕ Exit
+          </button>
+        </div>
+      )}
+
       {/* Floating Map Layer Switcher: Street vs Satellite */}
       <div className="map-layer-switcher">
         <button
@@ -174,7 +212,12 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
         )}
       </div>
 
-      <MapContainer center={center} zoom={9} style={{ height: "100%", width: "100%" }}>
+      <MapContainer
+        center={center}
+        zoom={9}
+        style={{ height: "100%", width: "100%", cursor: isPickingLocation ? "crosshair" : "grab" }}
+      >
+        <MapClickHandler isPickingLocation={isPickingLocation} onMapClick={onMapClick} />
         {mapLayer === "streets" ? (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -285,28 +328,51 @@ export function SimulationMapView({ sites = {}, selectedSite, onSelectSite, show
                   }}
                 />
               )}
+              {/* Custom Location Distinct Halo */}
+              {data?.is_custom && (
+                <CircleMarker
+                  center={[params.latitude, params.longitude]}
+                  radius={isSelected ? 38 : 26}
+                  pathOptions={{
+                    color: "#8b5cf6",
+                    fillColor: "#c084fc",
+                    fillOpacity: 0.3,
+                    weight: 2.5,
+                    dashArray: "4 3",
+                  }}
+                />
+              )}
 
               <CircleMarker
                 center={[params.latitude, params.longitude]}
                 radius={isSelected ? 13 : 10}
                 pathOptions={{
-                  color: "#FFFFFF",
+                  color: data?.is_custom ? "#8b5cf6" : "#FFFFFF",
                   fillColor: color,
                   fillOpacity: 0.95,
-                  weight: 3,
+                  weight: data?.is_custom ? 3.5 : 3,
                 }}
                 eventHandlers={{ click: () => onSelectSite && onSelectSite(locationId) }}
               >
                 <Popup>
-                  <div style={{ fontSize: 13, lineHeight: 1.45, minWidth: 230 }}>
-                    <strong style={{ fontSize: 13.5 }}>🏔️ {params.name}</strong><br />
-                    <span style={{ color: "#64748b", fontSize: 11.5 }}>{locationId} · Elevation {params.elevation_m}m</span><br />
+                  <div style={{ fontSize: 13, lineHeight: 1.45, minWidth: 240 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <strong style={{ fontSize: 13.5 }}>{data?.is_custom ? "📍 " : "🏔️ "}{params.name}</strong>
+                      {data?.is_custom && (
+                        <span style={{ fontSize: 9.5, background: "#ede9fe", color: "#6d28d9", padding: "1px 6px", borderRadius: 10, fontWeight: 800 }}>
+                          CUSTOM SITE
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ color: "#64748b", fontSize: 11.5 }}>
+                      {locationId} · Elevation {params.elevation_m}m · Slope {params.slope_deg || 38}°
+                    </span><br />
                     <div style={{ marginTop: 6, fontSize: 12 }}>
                       <span>Landslide Risk: <strong style={{ color }}>{Math.round(data?.probability_percent ?? (data?.calibrated_probability != null ? data.calibrated_probability * 100 : 80))}% Probability ({stability})</strong></span><br />
-                      <span>Connecting Highway: <strong>{data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}</strong></span>
+                      <span>Connecting Highway: <strong>{data?.primary_road_corridor || data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}</strong></span>
                     </div>
                     <div style={{ marginTop: 6, padding: "6px 8px", background: isUnstable ? "#fef2f2" : "#f8fafc", borderRadius: 6, border: `1px solid ${isUnstable ? "#fca5a5" : "#e2e8f0"}`, fontSize: 11.5, color: isUnstable ? "#991b1b" : "#334155" }}>
-                      📢 There is a {Math.round(data?.probability_percent ?? 80)}% probability of a landslide in the road connecting {data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}.
+                      📢 There is a {Math.round(data?.probability_percent ?? 80)}% probability of a landslide in the road connecting {data?.primary_road_corridor || data?.spatial_context?.primary_road_corridor || LOCATION_ROAD_NAMES[locationId] || params.name}.
                       <div style={{ marginTop: 3, fontWeight: 600 }}>
                         👉 {isUnstable ? "Immediate action: Evacuate to relief shelters. Avoid road transit." : isMarginal ? "Action: Stay on high alert, prepare emergency go-bags." : "Status: Nominal landscape equilibrium."}
                       </div>

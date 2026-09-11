@@ -2747,6 +2747,212 @@ input[type="range"] {
   font-size: 13px;
 }
 
+/* =========================================================================
+   SIMULATION WORKSPACE: CUSTOM LOCATION INSPECTION & MAP PIN STYLES
+   ========================================================================= */
+
+.sim-custom-loc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1.5px solid #a855f7;
+  background: #f5f3ff;
+  color: #6b21a8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sim-custom-loc-btn:hover {
+  background: #ede9fe;
+  border-color: #9333ea;
+  box-shadow: 0 2px 6px rgba(168, 85, 247, 0.2);
+}
+
+.sim-custom-loc-btn.active-picking {
+  background: #7c3aed;
+  color: #ffffff;
+  border-color: #6d28d9;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.35);
+  animation: pulse-picker-btn 1.5s infinite;
+}
+
+@keyframes pulse-picker-btn {
+  0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(124, 58, 237, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+}
+
+.sim-custom-count-badge {
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.sim-custom-loc-btn.active-picking .sim-custom-count-badge {
+  background: #ffffff;
+  color: #7c3aed;
+  border-color: transparent;
+}
+
+/* On-Map Interactive Picking Banner */
+.sim-map-picking-banner {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: #1e1b4b;
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 24px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  border: 1.5px solid #a855f7;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  pointer-events: auto;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.sim-map-picking-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c084fc;
+  box-shadow: 0 0 8px #c084fc;
+  animation: pulse-dot 1s infinite alternate;
+}
+
+@keyframes pulse-dot {
+  from { transform: scale(0.8); opacity: 0.7; }
+  to { transform: scale(1.3); opacity: 1; }
+}
+
+.sim-map-picking-cancel-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sim-map-picking-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Custom Location Success & Loading Popups */
+.custom-loc-success-toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 99999;
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  background: #ffffff;
+  border: 2px solid #8b5cf6;
+  border-left: 6px solid #7c3aed;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(124, 58, 237, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 12px 14px;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.custom-loc-loading-toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 99999;
+  background: #1e1b4b;
+  color: #ffffff;
+  border: 1.5px solid #818cf8;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  animation: slideInDown 0.3s ease-out;
+}
+
+/* Custom Pin Beacon & Marker Halo on Leaflet Map */
+.custom-pin-beacon {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.custom-pin-beacon.critical {
+  background: #dc2626;
+  border: 2px solid #ffffff;
+}
+
+.custom-pin-beacon.major {
+  background: #ea580c;
+  border: 2px solid #ffffff;
+}
+
+.custom-pin-beacon.moderate {
+  background: #d97706;
+  border: 2px solid #ffffff;
+}
+
+.custom-pin-beacon.stable {
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+}
+
+.custom-halo-glow {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  border-radius: 50%;
+  border: 2px solid #c084fc;
+  opacity: 0.8;
+  animation: halo-pulse 2s infinite ease-out;
+}
+
+@keyframes halo-pulse {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.custom-marker-badge {
+  position: absolute;
+  bottom: -6px;
+  right: -8px;
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 6px;
+  border: 1px solid #ffffff;
+  letter-spacing: 0.5px;
+}
+
+
 
 
 
