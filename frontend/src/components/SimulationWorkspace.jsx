@@ -282,110 +282,99 @@ export function SimulationWorkspace() {
 
       {/* Left / Center Section: Dedicated Map */}
       <div className="sim-map-container">
-        {/* Top Controls Toolbar: people button, roads button, and 1-Year Timeline Controller */}
+        {/* Top Controls Toolbar: Ultra-Compact Unified Control Bar */}
         <div className="sim-map-topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* Dedicated People Toggle Button */}
+          {/* Left: Map Layer Toggles */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button
               className={`sim-people-btn ${showPeople ? "active" : ""}`}
               onClick={() => setShowPeople(!showPeople)}
               title="Toggle population and observer pins across North Sikkim settlements"
             >
-              <span>{showPeople ? "👥 People Marked: ON" : "👥 People Marked: OFF"}</span>
+              <span>👥 People</span>
               <span className={`sim-people-badge ${showPeople ? "on" : "off"}`}>
-                {showPeople ? "Active" : "Hidden"}
+                {showPeople ? "ON" : "OFF"}
               </span>
             </button>
 
-            {/* Dedicated Towns & Government Roads Toggle Button */}
             <button
               className={`sim-people-btn ${showInfrastructure ? "active" : ""}`}
               onClick={() => setShowInfrastructure(!showInfrastructure)}
-              title="Toggle authentic government highways (BRO/PWD) and settlement towns across Sikkim"
+              title="Toggle authentic government highways (BRO/PWD) and settlement towns"
             >
-              <span>{showInfrastructure ? "🛣️ Towns & Roads: ON" : "🛣️ Towns & Roads: OFF"}</span>
+              <span>🛣️ Towns & Roads</span>
               <span className={`sim-people-badge ${showInfrastructure ? "on" : "off"}`}>
-                {showInfrastructure ? "Active" : "Hidden"}
+                {showInfrastructure ? "ON" : "OFF"}
               </span>
             </button>
           </div>
 
-          {/* 1-Year Simulation Playback Controls with Multi-Speed & Slow-Motion (< 1x) */}
+          {/* Center: 1-Year Playback & Speed Controls */}
           <div className="sim-timeline-ctrl-strip">
             <button
               className={`btn btn-sm ${isPlaying ? "btn-warning" : "btn-primary"}`}
               onClick={handlePlayPause}
-              style={{ fontWeight: 700 }}
+              style={{ fontWeight: 700, padding: "3px 10px", fontSize: 11.5 }}
             >
-              {isPlaying ? "⏸️ Pause" : (dayOfYear >= 365 ? "🔄 Replay Year (60s)" : "▶️ Play Year Simulation")}
+              {isPlaying ? "⏸️ Pause" : (dayOfYear >= 365 ? "🔄 Replay" : "▶️ Play (60s)")}
             </button>
             <button
               className="btn btn-sm"
               onClick={handleReplay}
               title="Reset and start 1-year replay from January 1"
+              style={{ padding: "3px 8px", fontSize: 11.5 }}
             >
-              🔄 Replay
+              🔄
             </button>
             <div className="sim-speed-control-bar">
               <span className="sim-speed-label">Speed:</span>
               <div className="sim-speed-buttons">
-                {[0.25, 0.5, 1, 2, 3].map((spd) => (
+                {[0.5, 1, 2, 3].map((spd) => (
                   <button
                     key={spd}
                     type="button"
                     className={`sim-speed-chip ${playbackSpeed === spd ? "active" : ""}`}
                     onClick={() => setPlaybackSpeed(spd)}
-                    title={`Playback speed ${spd}x (${spd < 1 ? "Slow Motion" : "Normal/Fast"})`}
+                    title={`Playback speed ${spd}x`}
                   >
                     {spd}x
                   </button>
                 ))}
               </div>
-              <input
-                type="range"
-                min="0.25"
-                max="3.0"
-                step="0.25"
-                value={playbackSpeed}
-                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                className="sim-speed-slider"
-                title={`Fine-tune simulation speed: ${playbackSpeed}x`}
-              />
             </div>
+          </div>
+
+          {/* Right: Date, Season & Active Hazard Indicator */}
+          <div className="sim-topbar-hud-group">
+            <div className="sim-calendar-date-pill">
+              <span>📅</span>
+              <strong>{dateInfo.dateString}</strong>
+              <span className="sim-calendar-day-count">{dayOfYear}/365</span>
+            </div>
+
+            <div className="sim-calendar-season-pill" title={`${seasonInfo.name} — ${seasonInfo.desc}`}>
+              <span>{seasonInfo.icon}</span>
+              <span style={{ fontWeight: 600 }}>{seasonInfo.name}</span>
+            </div>
+
+            {activeRedCount > 0 ? (
+              <div className="sim-active-hazard-pill danger" title={`${activeRedCount} active severe hazard region(s)`}>
+                <span className="pulse-danger-dot" style={{ width: 6, height: 6 }} />
+                <span>🚨 LANDSLIDE ({activeRedCount})</span>
+              </div>
+            ) : activeAmberCount > 0 ? (
+              <div className="sim-active-hazard-pill warning">
+                <span>⚠️ ELEVATED</span>
+              </div>
+            ) : (
+              <div className="sim-active-hazard-pill normal">
+                <span>🟢 EQUILIBRIUM</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 1-Year Calendar HUD Banner */}
-        <div className="sim-calendar-hud-banner">
-          <div className="sim-calendar-date-pill">
-            <span className="sim-calendar-icon">📅</span>
-            <strong>{dateInfo.dateString}</strong>
-            <span className="sim-calendar-day-count">(Day {dayOfYear}/365)</span>
-          </div>
-
-          <div className="sim-calendar-season-pill">
-            <span>{seasonInfo.icon}</span>
-            <span style={{ fontWeight: 600 }}>{seasonInfo.name}</span>
-            <span className="sim-season-subtext">— {seasonInfo.desc}</span>
-          </div>
-
-          {activeRedCount > 0 ? (
-            <div className="sim-active-hazard-pill danger">
-              <span className="pulse-danger-dot" />
-              <span>🚨 LANDSLIDE ACTIVE ({activeRedCount} REGION)</span>
-            </div>
-          ) : activeAmberCount > 0 ? (
-            <div className="sim-active-hazard-pill warning">
-              <span>⚠️ ELEVATED PORE PRESSURE</span>
-            </div>
-          ) : (
-            <div className="sim-active-hazard-pill normal">
-              <span>🟢 NORMAL EQUILIBRIUM</span>
-            </div>
-          )}
-        </div>
-
-        {/* Continuous Timeline Progress Bar & Interactive Scrubber */}
+        {/* Continuous Timeline Progress Bar & Interactive Scrubber (Slim Height) */}
         <div className="sim-timeline-slider-track">
           <input
             type="range"
