@@ -100,6 +100,7 @@ echo  wrong, the error will be visible in THAT window -- please read it
 echo  before asking for help, it usually says exactly what is broken.)
 echo.
 
+python -c "from backend.routes.profile import set_active_profile; set_active_profile('operations')" >nul 2>&1
 start "Bhu-Rakshak Server (do not close while using the dashboard)" cmd /k python -m uvicorn backend.main:app --host 127.0.0.1 --port %PORT%
 
 echo Waiting for server to respond...

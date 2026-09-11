@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from service.prediction_service import PredictionService
-from backend.routes import predict, simulate, train, alerts, impact, locations, settings
+from backend.routes import predict, simulate, train, alerts, impact, locations, settings, profile
 from backend import config
 
 
@@ -53,6 +53,7 @@ app.include_router(train.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(impact.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
 
 # Serve the built frontend (frontend/dist after `npm run build`) as
 # static files, and serve the synthetic/real terrain heightmap JSON so

@@ -1,0 +1,6 @@
+{
+  "active_profile": "operations",
+  "version_number": 1,
+  "description": "Operations Mode (Alerts & Settings)",
+  "default_on_boot": "operations"
+}

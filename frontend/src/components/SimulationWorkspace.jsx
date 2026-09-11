@@ -217,13 +217,33 @@ export function SimulationWorkspace() {
             roadBlocked: r.roadBlocked,
           });
 
-          // 2. Automated SMS dispatch to people/observers via backend API
+          // 2. Automated SMS dispatch and persistent history recording
           fetch("/api/alerts/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ location_id: locId, dry_run: true }),
           }).catch((err) => {
             console.warn("Auto simulation alert dispatch:", err);
+          });
+
+          fetch("/api/alerts/history/record", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location_id: locId,
+              location_name: r.name,
+              road_corridor: roadName,
+              probability_percent: prob,
+              severity_band: r.severity_band || "MAJOR",
+              message: alertMessage,
+              action_directive: actionDirective,
+              date_string: dateInfo.dateString,
+              road_blocked: Boolean(r.roadBlocked),
+              rainfall_24h_mm: r.rainfall_24h_mm || 180.0,
+              rainfall_1h_mm: r.rainfall_1h_mm || 25.0,
+            }),
+          }).catch((err) => {
+            console.warn("Auto simulation history record:", err);
           });
         }
       }

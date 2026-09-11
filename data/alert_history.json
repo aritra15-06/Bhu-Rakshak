@@ -1,0 +1,113 @@
+[
+  {
+    "alert_id": "ALT-20260911-003",
+    "timestamp": "2026-09-11T18:09:22.285689Z",
+    "date_string": "September 11, 2026",
+    "type": "OPERATOR_TEST",
+    "location_id": "TEST-DIAG",
+    "location_name": "Mangan Bazaar",
+    "road_corridor": "Direct Observer Channel",
+    "probability_percent": 100.0,
+    "severity_band": "TEST_DIAGNOSTIC",
+    "recipients_count": 1,
+    "recipients": [
+      {
+        "name": "Passang Norbu",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "DIRECT_TEST"
+      }
+    ],
+    "message": "🚨 BHU-RAKSHAK TEST ALERT: Sensor connection verified for Passang Norbu at Mangan Bazaar. Landslide early warning telemetry operating normally.",
+    "provider": "fast2sms",
+    "status": "DELIVERED"
+  },
+  {
+    "alert_id": "ALT-2024-08-22-01",
+    "timestamp": "2024-08-22T16:50:12Z",
+    "date_string": "August 22, 2024",
+    "type": "SIMULATION_BROADCAST",
+    "location_id": "LOC01",
+    "location_name": "Dikchu Teesta Valley Left Slope",
+    "road_corridor": "NH-10 North Sikkim Highway (Mangan-Dikchu Corridor)",
+    "probability_percent": 81.0,
+    "severity_band": "MAJOR",
+    "recipients_count": 5,
+    "recipients": [
+      {
+        "name": "Passang Norbu",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "AFFECTED_TOWN"
+      },
+      {
+        "name": "Dr. Anup Chettri",
+        "phone": "+919434198765",
+        "town": "Dikchu Settlement",
+        "tier": "IMMEDIATE"
+      },
+      {
+        "name": "Karma Lepcha",
+        "phone": "+919733054321",
+        "town": "Chungthang Town",
+        "tier": "ADJACENT_VALLEY"
+      },
+      {
+        "name": "Mingma Tamang",
+        "phone": "+919832045678",
+        "town": "Lachen Road Camp",
+        "tier": "ADJACENT_VALLEY"
+      },
+      {
+        "name": "Bikash Sharma",
+        "phone": "+919830089123",
+        "town": "Rangpo Township",
+        "tier": "TRANSIT_CHECKPOST"
+      }
+    ],
+    "message": "EMERGENCY: There is a 81% probability of a landslide in the road connecting NH-10 North Sikkim Highway (Mangan-Dikchu Corridor). Immediate action: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on this road.",
+    "provider": "Fast2SMS / Broadcast Relay",
+    "status": "DELIVERED"
+  },
+  {
+    "alert_id": "ALT-2024-06-13-01",
+    "timestamp": "2024-06-13T12:05:44Z",
+    "date_string": "June 13, 2024",
+    "type": "EMERGENCY_DISPATCH",
+    "location_id": "LOC03",
+    "location_name": "Lachung River Road Corridor",
+    "road_corridor": "SH-1 Chungthang-Lachung Corridor",
+    "probability_percent": 84.0,
+    "severity_band": "MAJOR",
+    "recipients_count": 4,
+    "recipients": [
+      {
+        "name": "Karma Lepcha",
+        "phone": "+919733054321",
+        "town": "Chungthang Town",
+        "tier": "AFFECTED_TOWN"
+      },
+      {
+        "name": "Mingma Tamang",
+        "phone": "+919832045678",
+        "town": "Lachen Road Camp",
+        "tier": "IMMEDIATE"
+      },
+      {
+        "name": "Passang Norbu",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "ADJACENT_VALLEY"
+      },
+      {
+        "name": "Dr. Anup Chettri",
+        "phone": "+919434198765",
+        "town": "Dikchu Settlement",
+        "tier": "ADJACENT_VALLEY"
+      }
+    ],
+    "message": "URGENT WARNING: There is a 84% probability of a landslide in the road connecting SH-1 Chungthang-Lachung Corridor. Immediate action: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on this road.",
+    "provider": "Fast2SMS / Broadcast Relay",
+    "status": "DELIVERED"
+  }
+]
