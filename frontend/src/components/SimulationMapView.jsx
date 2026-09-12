@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, Fragment } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Polyline, Tooltip, Popup, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { MOCK_POPULATION, ROAD_CORRIDORS, SIKKIM_SETTLEMENTS } from "../data/mockPopulation";
@@ -14,6 +14,41 @@ function MapClickHandler({ isPickingLocation, onMapClick }) {
   });
   return null;
 }
+
+const createWeatherCloudIcon = (rain1h, rain24h, isHeavyStorm) => {
+  const rate = Number(rain1h || 0).toFixed(1);
+  const cloudFill = isHeavyStorm ? "#1e293b" : "#334155";
+  const cloudStroke = isHeavyStorm ? "#475569" : "#64748b";
+
+  return L.divIcon({
+    className: "simulation-weather-cloud-icon",
+    html: `
+      <div class="weather-cloud-container ${isHeavyStorm ? "heavy-storm" : ""}">
+        <div class="weather-rain-badge">🌧️ ${rate} mm/h</div>
+        <div class="weather-cloud-wrapper">
+          <svg class="weather-cloud-svg" viewBox="0 0 56 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 24h28a8 8 0 0 0 0-16 12 12 0 0 0-22.8 3.5A7.5 7.5 0 0 0 14 24z"
+                  fill="${cloudFill}" stroke="${cloudStroke}" stroke-width="1.5" />
+            ${
+              isHeavyStorm
+                ? '<path class="lightning-bolt" d="M28 12l-3 7h4l-2.5 7 7.5-9h-4.5l2.5-5z" fill="#facc15" stroke="#eab308" stroke-width="0.8" />'
+                : ""
+            }
+          </svg>
+          <div class="rain-streaks-container">
+            <span class="rain-streak drop-1" style="left: 8px;"></span>
+            <span class="rain-streak drop-2" style="left: 17px;"></span>
+            <span class="rain-streak drop-3" style="left: 26px;"></span>
+            <span class="rain-streak drop-4" style="left: 35px;"></span>
+            <span class="rain-streak drop-5" style="left: 44px;"></span>
+          </div>
+        </div>
+      </div>
+    `,
+    iconSize: [64, 56],
+    iconAnchor: [32, 54],
+  });
+};
 
 const createHumanIcon = (status) => {
   const isEvac = status.isDanger;
@@ -313,8 +348,27 @@ export function SimulationMapView({
           const isMarginal = stability === "MARGINAL" || (fos != null && fos < 1.3);
           const isSelected = selectedSite === locationId;
 
+          // Dynamic weather calculation: rain cloud animation over places receiving precipitation
+          const rain1h = data?.rainfall_1h_mm ?? params?.rainfall_1h_mm ?? 0;
+          const rain24h = data?.rainfall_24h_mm ?? params?.rainfall_24h_mm ?? 0;
+          const statusStr = (data?.statusText || "").toLowerCase();
+          const isRaining =
+            rain1h >= 5.0 ||
+            rain24h >= 40.0 ||
+            statusStr.includes("cloudburst") ||
+            statusStr.includes("deluge") ||
+            statusStr.includes("squall") ||
+            statusStr.includes("storm") ||
+            statusStr.includes("rain") ||
+            isUnstable;
+          const isHeavyStorm =
+            rain1h >= 16.0 ||
+            rain24h >= 100.0 ||
+            statusStr.includes("cloudburst") ||
+            isUnstable;
+
           return (
-            <div key={locationId}>
+            <Fragment key={locationId}>
               {/* Core Station Marker */}
               <CircleMarker
                 center={[params.latitude, params.longitude]}
@@ -351,12 +405,21 @@ export function SimulationMapView({
                       </div>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 10.5, color: "#94a3b8" }}>
-                      Admin Geotechnical Telemetry: FoS {fos != null ? fos.toFixed(2) : "—"} · Severity {sevBand}
+                      Admin Geotechnical Telemetry: FoS {fos != null ? fos.toFixed(2) : "—"} · Severity {sevBand} · Rain {rain1h.toFixed(1)}mm/h ({rain24h.toFixed(0)}mm/24h)
                     </div>
                   </div>
                 </Popup>
               </CircleMarker>
-            </div>
+
+              {/* Dynamic Weather Rain & Dark Cloud Animation (Active only during precipitation, ends automatically when rain stops) */}
+              {isRaining && (
+                <Marker
+                  position={[params.latitude, params.longitude]}
+                  icon={createWeatherCloudIcon(rain1h, rain24h, isHeavyStorm)}
+                  interactive={false}
+                />
+              )}
+            </Fragment>
           );
         })}
 

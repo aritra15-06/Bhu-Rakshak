@@ -482,19 +482,19 @@ export function Terrain3DView() {
         )}
       </div>
 
-      {/* Clean Toggle Controls */}
+      {/* Compact 3D View Toggle Controls */}
       <div className="terrain-view-toggle">
         <button
           className={`terrain-toggle-btn ${mode === "satellite" ? "active" : ""}`}
           onClick={() => setMode("satellite")}
         >
-          🛰️ Satellite View
+          🛰️ Satellite
         </button>
         <button
           className={`terrain-toggle-btn ${mode === "offline" ? "active" : ""}`}
           onClick={() => setMode("offline")}
         >
-          🌱 Realistic Landscape
+          🌱 Landscape
         </button>
       </div>
 

@@ -334,42 +334,6 @@ input[type="range"] {
   50% { opacity: 0.4; transform: scale(0.85); }
 }
 
-.terrain-view-toggle {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 100;
-  display: flex;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(8px);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.terrain-toggle-btn {
-  padding: 6px 12px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 500;
-  color: #94a3b8;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.terrain-toggle-btn:hover {
-  color: #f8fafc;
-}
-
-.terrain-toggle-btn.active {
-  background: #2563eb;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
-}
-
 .contact-row {
   display: flex;
   align-items: center;
@@ -555,32 +519,33 @@ input[type="range"] {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+/* Compact 3D Terrain Mode Switcher (Aligned alongside 2D/3D toggle in MainView) */
 .terrain-view-toggle {
   position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
+  top: 14px;
+  right: 195px;
+  z-index: 1001;
   display: flex;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
-  padding: 4px;
-  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  gap: 3px;
 }
 
 .terrain-toggle-btn {
   border: none;
   background: transparent;
   color: #475569;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 5px 11px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .terrain-toggle-btn:hover {
@@ -591,7 +556,134 @@ input[type="range"] {
 .terrain-toggle-btn.active {
   background: #0f172a;
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 640px) {
+  .terrain-view-toggle {
+    top: 56px;
+    right: 14px;
+  }
+}
+
+/* =========================================================================
+   Simulation Dynamic Weather Cloud & Rain Animation
+   ========================================================================= */
+.simulation-weather-cloud-icon {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+}
+
+.weather-cloud-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 64px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+
+.weather-rain-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(4px);
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.weather-cloud-container.heavy-storm .weather-rain-badge {
+  background: rgba(127, 29, 29, 0.92);
+  border-color: rgba(239, 68, 68, 0.65);
+  color: #fef2f2;
+}
+
+.weather-cloud-wrapper {
+  position: relative;
+  width: 56px;
+  height: 46px;
+  animation: weatherCloudFloat 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes weatherCloudFloat {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-4px); }
+}
+
+.weather-cloud-svg {
+  display: block;
+  width: 56px;
+  height: 30px;
+  overflow: visible;
+}
+
+.lightning-bolt {
+  animation: stormLightning 3.2s infinite;
+  transform-origin: center;
+}
+
+@keyframes stormLightning {
+  0%, 88%, 94%, 100% { opacity: 0; transform: scale(0.85); }
+  89%, 91%, 93% { opacity: 1; transform: scale(1.1); filter: drop-shadow(0 0 6px #facc15); }
+}
+
+.rain-streaks-container {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  width: 56px;
+  height: 24px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rain-streak {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 9px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.95), rgba(96, 165, 250, 0.2));
+  border-radius: 1px;
+  transform: rotate(16deg);
+  opacity: 0;
+  animation: rainDropFall 0.75s linear infinite;
+}
+
+.weather-cloud-container.heavy-storm .rain-streak {
+  width: 2.5px;
+  height: 12px;
+  background: linear-gradient(180deg, #38bdf8, #818cf8);
+  animation-duration: 0.52s;
+}
+
+.drop-1 { animation-delay: 0.0s; }
+.drop-2 { animation-delay: 0.28s; }
+.drop-3 { animation-delay: 0.52s; }
+.drop-4 { animation-delay: 0.15s; }
+.drop-5 { animation-delay: 0.38s; }
+
+@keyframes rainDropFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) translateX(0px) rotate(16deg);
+  }
+  30% {
+    opacity: 0.95;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(18px) translateX(-5px) rotate(16deg);
+  }
 }
 
 .citizen-report-item {
