@@ -180,8 +180,12 @@ The operations dashboard renders these feature contributions in real-time waterf
 
 ---
 
-### 5.2 3D Digital Elevation Model (DEM) with Offline Satellite Caching
-- **WebGL Terrain Visualization**: Built with Three.js, rendering realistic 3D mountain topographies, elevation contours, failure slip-planes, and interactive OrbitControls (rotate, pan, zoom).
+### 5.2 3D Digital Elevation Model (DEM) with OpenTopography API & Offline Satellite Caching
+- **Authentic OpenTopography Global DEM Integration**:
+  - Integrated with the live **OpenTopography Global DEM API** (`portal.opentopography.org/API/globaldem`) using authentic **SRTMGL1 (30m spaceborne radar elevation model)** data.
+  - Covers the entire monitored North Sikkim mountain corridor ($[27.05^\circ\text{N}, 88.45^\circ\text{E}]$ to $[27.75^\circ\text{N}, 88.80^\circ\text{E}]$), capturing authentic Himalayan geomorphology spanning $218.9\text{m}$ (lower Teesta riverbed) to $5,748.9\text{m}$ (glaciated high-altitude ridges).
+  - Managed programmatically via `terrain3d/fetch_dem.py` and exposed over HTTP via `GET /api/terrain/provenance` and `POST /api/terrain/fetch`.
+- **WebGL Terrain Visualization**: Built with Three.js, rendering authentic 3D mountain topographies, elevation contours, failure slip-planes, and interactive OrbitControls (rotate, pan, zoom).
 - **Persistent Offline Architecture (IndexedDB)**:
   - Field stations in North Sikkim (e.g. Lachen, Chungthang) frequently experience complete cellular and satellite internet outages during extreme monsoon storms.
   - When the machine is **Online**, high-resolution satellite imagery (Esri ArcGIS World Imagery) is fetched, rendered onto the 3D surface, and saved automatically into browser **IndexedDB** (`BhuRakshakTerrainDB` -> `satellite_textures`).
@@ -243,7 +247,9 @@ Bhu-Rakshak_Complete_System/
 │   │   ├── profile.py              # Unified console profile state
 │   │   ├── settings.py             # System provider configurations
 │   │   ├── simulate.py             # Scenario simulation & custom location inspection
+│   │   ├── terrain.py              # OpenTopography DEM provenance & fetch endpoints
 │   │   └── train.py                # Model retraining background worker
+
 │   └── models/
 │       └── alert_history_store.py  # Persistent JSON audit store for alerts & incidents
 ├── physics/                        # Deterministic Geotechnical Physics Engine
@@ -360,6 +366,8 @@ Open **`http://127.0.0.1:8731`** in any modern web browser.
 | `POST` | `/api/impact` | Calculates affected settlements and road blockages for a site. | `{"location_id": "LOC02", "radius_km": 5.0}` |
 | `POST` | `/api/train` | Triggers asynchronous background model retraining with progress. | None |
 | `GET` | `/api/train/status` | Polling endpoint for active model training progress and PR-AUC. | None |
+| `GET` | `/api/terrain/provenance` | Returns OpenTopography DEM metadata, elevation statistics & API status. | None |
+| `POST` | `/api/terrain/fetch` | Triggers on-demand OpenTopography API fetch for North Sikkim DEM grid. | `{"api_key": "...", "grid_size": 128}` |
 
 ---
 

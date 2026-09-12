@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from service.prediction_service import PredictionService
-from backend.routes import predict, simulate, train, alerts, impact, locations, settings, profile
+from backend.routes import predict, simulate, train, alerts, impact, locations, settings, profile, terrain
 from backend import config
 
 
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
     print(f"[Bhu-Rakshak backend] Model loaded: {config.MODEL_VERSION}")
     print(f"[Bhu-Rakshak backend] Twilio configured: {config.TWILIO_CONFIGURED} "
           f"({'live SMS available' if config.TWILIO_CONFIGURED else 'dry-run only until credentials are set'})")
+    print(f"[Bhu-Rakshak backend] OpenTopography API configured: {config.OPENTOPOGRAPHY_CONFIGURED}")
     yield
     # No teardown needed for this demo -- the process exit handles cleanup.
 
@@ -43,6 +44,7 @@ def health():
         "status": "ok",
         "model_loaded": hasattr(app.state, "prediction_service"),
         "twilio_configured": bool(os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN") and os.environ.get("TWILIO_FROM_NUMBER")),
+        "opentopography_configured": config.OPENTOPOGRAPHY_CONFIGURED,
     }
 
 
@@ -54,6 +56,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(impact.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(terrain.router, prefix="/api")
 
 # Serve the built frontend (frontend/dist after `npm run build`) as
 # static files, and serve the synthetic/real terrain heightmap JSON so

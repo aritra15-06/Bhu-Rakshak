@@ -469,6 +469,19 @@ export function Terrain3DView() {
         </span>
       </div>
 
+      {/* Real DEM Provenance Badge from OpenTopography API */}
+      <div className="terrain-dem-badge">
+        <span>🏔️</span>
+        <span>
+          <strong>Real DEM:</strong> OpenTopography SRTMGL1 (30m)
+        </span>
+        {heightmap?.elevation_min_m && heightmap?.elevation_max_m && (
+          <span className="dem-badge-range">
+            {heightmap.elevation_min_m}m – {heightmap.elevation_max_m}m
+          </span>
+        )}
+      </div>
+
       {/* Clean Toggle Controls */}
       <div className="terrain-view-toggle">
         <button
