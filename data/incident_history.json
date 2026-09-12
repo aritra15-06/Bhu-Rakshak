@@ -1,5 +1,23 @@
 [
   {
+    "incident_id": "INC-2026-09-12-18",
+    "date": "October 6, 2026",
+    "timestamp": "2026-09-12T03:12:24.464507Z",
+    "location_id": "LOC_CUSTOM_9391",
+    "location_name": "下亚东乡 གྲོ་མོ་སྨད་ཆུས Slope",
+    "road_corridor": "Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula) corridor (8025m from slope)",
+    "nearest_settlement": "Mangan Bazaar",
+    "severity_band": "MAJOR",
+    "max_probability_percent": 71.0,
+    "peak_rainfall_24h_mm": 115.0,
+    "peak_rainfall_1h_mm": 16.0,
+    "status": "SYSTEM_PREDICTED_SIMULATION",
+    "road_blocked": true,
+    "road_blockage_duration": "Simulated Event Duration (12-48 hrs)",
+    "event_summary": "System predicted critical hazard along Jawaharlal Nehru Road (Gangtok-Tsomgo-Nathula) corridor (8025m from slope) with 71.0% probability.",
+    "early_warning_outcome": "Automated citizen SMS broadcast auto-dispatched to 5 observers: Immediate action required: Evacuate immediately to designated relief shelters on higher ground. Strictly avoid all vehicular travel on this road."
+  },
+  {
     "incident_id": "INC-2026-09-12-17",
     "date": "August 14, 2026",
     "timestamp": "2026-09-12T03:03:50.138826Z",

@@ -114,10 +114,7 @@ export function SimulationMapView({
 }) {
   const [mapLayer, setMapLayer] = useState("streets");
   const entries = Object.entries(sites);
-  const firstData = entries[0]?.[1];
-  const center = entries.length && entries[0][1]?.latitude
-    ? [entries[0][1].latitude, entries[0][1].longitude]
-    : [27.599, 88.6483];
+  const center = [27.52, 88.60];
 
   // Dynamically compute live safety status for each citizen based on simulation telemetry
   function getCitizenStatus(citizen) {
