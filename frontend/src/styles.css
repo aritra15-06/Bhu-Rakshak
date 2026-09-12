@@ -559,7 +559,18 @@ input[type="range"] {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-@media (max-width: 640px) {
+.terrain-toggle-group {
+  display: flex;
+  gap: 2px;
+}
+
+.terrain-toggle-divider {
+  width: 1px;
+  background: #cbd5e1;
+  margin: 2px 2px;
+}
+
+@media (max-width: 840px) {
   .terrain-view-toggle {
     top: 56px;
     right: 14px;

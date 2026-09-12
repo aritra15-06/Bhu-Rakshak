@@ -1,5 +1,146 @@
 [
   {
+    "alert_id": "ALT-20260912-012",
+    "timestamp": "2026-09-12T03:03:50.119962Z",
+    "date_string": "August 14, 2026",
+    "type": "SIMULATION_EMERGENCY",
+    "location_id": "LOC02",
+    "location_name": "Chungthang Hydel Cut & Valley Junction",
+    "road_corridor": "NH-10 Teesta Valley Highway (Mangan-Dikchu)",
+    "probability_percent": 83.0,
+    "severity_band": "CATASTROPHIC_POTENTIAL",
+    "recipients_count": 5,
+    "recipients": [
+      {
+        "name": "Passang Norbu (Ward Officer)",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Dr. Anup Chettri (PHC Dikchu)",
+        "phone": "+919434198765",
+        "town": "Dikchu Settlement",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Karma Lepcha (Panchayat Secy)",
+        "phone": "+919733054321",
+        "town": "Chungthang Town",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Mingma Tamang (BRO Highway Supr)",
+        "phone": "+919832045678",
+        "town": "Lachen Road Camp",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Bikash Sharma (Teesta Checkpost)",
+        "phone": "+919830089123",
+        "town": "Rangpo Township",
+        "tier": "SECTOR_OBSERVER"
+      }
+    ],
+    "message": "There is a 83% probability of a landslide in the road connecting NH-10 Teesta Valley Highway (Mangan-Dikchu).",
+    "provider": "Simulation Auto-Relay",
+    "status": "DELIVERED"
+  },
+  {
+    "alert_id": "ALT-20260912-011",
+    "timestamp": "2026-09-12T03:03:40.873326Z",
+    "date_string": "July 12, 2026",
+    "type": "SIMULATION_EMERGENCY",
+    "location_id": "LOC01",
+    "location_name": "Dikchu Teesta Valley Left Slope",
+    "road_corridor": "NH-10 North Sikkim Highway (Mangan-Chungthang)",
+    "probability_percent": 81.0,
+    "severity_band": "CATASTROPHIC_POTENTIAL",
+    "recipients_count": 5,
+    "recipients": [
+      {
+        "name": "Passang Norbu (Ward Officer)",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Dr. Anup Chettri (PHC Dikchu)",
+        "phone": "+919434198765",
+        "town": "Dikchu Settlement",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Karma Lepcha (Panchayat Secy)",
+        "phone": "+919733054321",
+        "town": "Chungthang Town",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Mingma Tamang (BRO Highway Supr)",
+        "phone": "+919832045678",
+        "town": "Lachen Road Camp",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Bikash Sharma (Teesta Checkpost)",
+        "phone": "+919830089123",
+        "town": "Rangpo Township",
+        "tier": "SECTOR_OBSERVER"
+      }
+    ],
+    "message": "There is a 81% probability of a landslide in the road connecting NH-10 North Sikkim Highway (Mangan-Chungthang).",
+    "provider": "Simulation Auto-Relay",
+    "status": "DELIVERED"
+  },
+  {
+    "alert_id": "ALT-20260912-010",
+    "timestamp": "2026-09-12T03:03:34.176827Z",
+    "date_string": "June 18, 2026",
+    "type": "SIMULATION_EMERGENCY",
+    "location_id": "LOC03",
+    "location_name": "Lachung River Road Corridor (Bhim Nala)",
+    "road_corridor": "SH-1 Chungthang-Lachung Highway Corridor",
+    "probability_percent": 74.0,
+    "severity_band": "MAJOR",
+    "recipients_count": 5,
+    "recipients": [
+      {
+        "name": "Passang Norbu (Ward Officer)",
+        "phone": "+919475012345",
+        "town": "Mangan Bazaar",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Dr. Anup Chettri (PHC Dikchu)",
+        "phone": "+919434198765",
+        "town": "Dikchu Settlement",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Karma Lepcha (Panchayat Secy)",
+        "phone": "+919733054321",
+        "town": "Chungthang Town",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Mingma Tamang (BRO Highway Supr)",
+        "phone": "+919832045678",
+        "town": "Lachen Road Camp",
+        "tier": "SECTOR_OBSERVER"
+      },
+      {
+        "name": "Bikash Sharma (Teesta Checkpost)",
+        "phone": "+919830089123",
+        "town": "Rangpo Township",
+        "tier": "SECTOR_OBSERVER"
+      }
+    ],
+    "message": "There is a 74% probability of a landslide in the road connecting SH-1 Chungthang-Lachung Highway Corridor.",
+    "provider": "Simulation Auto-Relay",
+    "status": "DELIVERED"
+  },
+  {
     "alert_id": "ALT-20260911-009",
     "timestamp": "2026-09-11T20:45:37.722366Z",
     "date_string": "August 14, 2026",

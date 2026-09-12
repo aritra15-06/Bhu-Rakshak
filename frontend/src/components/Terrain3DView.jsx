@@ -61,12 +61,26 @@ function createStationBillboard(name, locationId, colorHex) {
   return sprite;
 }
 
+// Elevation scaling configuration based on real physical geography:
+// Bounding box: ~78km N-S by ~35km W-E (mean ~55km / 55,000 meters).
+// Three.js horizontal mesh planeSize = 800 units.
+// True physical scale: 800 / 55,000 = ~0.0145 units per meter of elevation.
+const BASE_DATUM_M = 2200; // Mean elevation reference datum
+const HORIZONTAL_SCALE = 800 / 55000; // ~0.0145 units/m
+
+export const RELIEF_SCALES = {
+  true: { label: "1:1 True Scale", factor: 1.0, title: "Exact 1:1 real-world physical elevation scale (zero exaggeration)" },
+  natural: { label: "1.4x Natural", factor: 1.4, title: "Recommended: Cartographically balanced natural Himalayan relief" },
+  enhanced: { label: "2.0x Enhanced", factor: 2.0, title: "Accentuated ridge and valley contrast" },
+};
+
 export function Terrain3DView() {
   const mountRef = useRef(null);
   const { sites, setSelectedSite, loading } = useSiteState();
   const [heightmap, setHeightmap] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [mode, setMode] = useState("satellite");
+  const [reliefMode, setReliefMode] = useState("natural");
   const [cachedMeta, setCachedMeta] = useState(() => getSatelliteMeta());
   const [satelliteSource, setSatelliteSource] = useState(typeof navigator !== "undefined" && navigator.onLine ? "live" : "cached");
   const sceneRef = useRef({});
@@ -135,6 +149,41 @@ export function Terrain3DView() {
     }
   }, [mode]);
 
+  // Dynamically update terrain mesh vertices, markers, and vegetation when relief scale changes
+  useEffect(() => {
+    if (!sceneRef.current?.geometry || !heightmap) return;
+    const { geometry, markers, treeGroup, treePositions } = sceneRef.current;
+    const factor = RELIEF_SCALES[reliefMode]?.factor ?? 1.4;
+    const mult = HORIZONTAL_SCALE * factor;
+
+    const positions = geometry.attributes.position;
+    for (let idx = 0; idx < heightmap.heights.length; idx++) {
+      const elev = heightmap.heights[idx];
+      positions.setY(idx, (elev - BASE_DATUM_M) * mult);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+
+    if (markers) {
+      markers.forEach((m) => {
+        const y = (m.elevation_m - BASE_DATUM_M) * mult;
+        if (m.sphere) m.sphere.position.y = y + 5;
+        if (m.ring) m.ring.position.y = y + 0.4;
+        if (m.ray) m.ray.position.y = y + 21;
+        if (m.billboard) m.billboard.position.y = y + 17;
+      });
+    }
+
+    if (treeGroup && treePositions) {
+      treeGroup.children.forEach((tree, idx) => {
+        const tp = treePositions[idx];
+        if (tp) {
+          tree.position.y = (tp.elevation - BASE_DATUM_M) * mult;
+        }
+      });
+    }
+  }, [reliefMode, heightmap]);
+
   useEffect(() => {
     if (!heightmap || !mountRef.current) return;
     const mount = mountRef.current;
@@ -146,7 +195,7 @@ export function Terrain3DView() {
     scene.fog = new THREE.FogExp2(0xbdd5e7, 0.0005);
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 1, 5000);
-    camera.position.set(0, 480, 680);
+    camera.position.set(0, 310, 560);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -167,12 +216,14 @@ export function Terrain3DView() {
     const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x3f3f46, 0.5);
     scene.add(hemiLight);
 
-    // Build 3D terrain elevation mesh
+    // Build 3D terrain elevation mesh with physically realistic elevation scaling
     const gridSize = heightmap.grid_size;
     const planeSize = 800;
     const geometry = new THREE.PlaneGeometry(planeSize, planeSize, gridSize - 1, gridSize - 1);
     geometry.rotateX(-Math.PI / 2);
 
+    const factor = RELIEF_SCALES[reliefMode]?.factor ?? 1.4;
+    const mult = HORIZONTAL_SCALE * factor;
     const positions = geometry.attributes.position;
     const treePositions = [];
 
@@ -180,16 +231,16 @@ export function Terrain3DView() {
       for (let i = 0; i < gridSize; i++) {
         const idx = j * gridSize + i;
         const elevation = heightmap.heights[idx];
-        const y = (elevation - 2000) * 0.14;
+        const y = (elevation - BASE_DATUM_M) * mult;
         positions.setY(idx, y);
 
-        // Collect tree coordinates for valley areas (<2200m)
-        if (elevation > 1000 && elevation < 2200 && (i * 7 + j * 13) % 15 === 0) {
+        // Collect tree coordinates for valley floors & middle slopes (<2500m)
+        if (elevation > 800 && elevation < 2500 && (i * 7 + j * 13) % 15 === 0) {
           const u = i / (gridSize - 1);
           const v = j / (gridSize - 1);
           const tx = (u - 0.5) * planeSize + (Math.sin(idx) * 4);
           const tz = (v - 0.5) * planeSize + (Math.cos(idx) * 4);
-          treePositions.push({ x: tx, y, z: tz, scale: 0.6 + Math.random() * 0.5 });
+          treePositions.push({ x: tx, y, z: tz, elevation, scale: 0.45 + Math.random() * 0.35 });
         }
       }
     }
@@ -288,19 +339,20 @@ export function Terrain3DView() {
     scene.add(terrainMesh);
 
     // 3D Pine Tree Clusters in Valley Floors
+    let treeGroup = null;
     if (treePositions.length > 0) {
-      const treeGroup = new THREE.Group();
-      const trunkGeom = new THREE.CylinderGeometry(0.7, 1.1, 5, 5);
+      treeGroup = new THREE.Group();
+      const trunkGeom = new THREE.CylinderGeometry(0.4, 0.7, 3.2, 5);
       const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2d1f15, roughness: 0.9 });
-      const foliageGeom = new THREE.ConeGeometry(4, 11, 5);
+      const foliageGeom = new THREE.ConeGeometry(2.5, 7, 5);
       const foliageMat = new THREE.MeshStandardMaterial({ color: 0x1e4620, roughness: 0.8 });
 
       treePositions.slice(0, 180).forEach((tp) => {
         const tree = new THREE.Group();
         const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-        trunk.position.y = 2.5;
+        trunk.position.y = 1.6;
         const foliage = new THREE.Mesh(foliageGeom, foliageMat);
-        foliage.position.y = 9;
+        foliage.position.y = 5.5;
         tree.add(trunk);
         tree.add(foliage);
 
@@ -316,13 +368,14 @@ export function Terrain3DView() {
     const mouse = new THREE.Vector2();
     const markerMeshes = [];
     const beaconRays = [];
+    const markers = [];
 
     heightmap.site_markers.forEach((marker) => {
       const u = marker.grid_x / (gridSize - 1);
       const v = marker.grid_y / (gridSize - 1);
       const x = (u - 0.5) * planeSize;
       const z = (v - 0.5) * planeSize;
-      const y = (marker.elevation_m - 2000) * 0.14 + 14;
+      const y = (marker.elevation_m - BASE_DATUM_M) * mult;
 
       const siteData = sites[marker.location_id];
       const stability = siteData?.prediction?.physics_output?.stability_state || "UNKNOWN";
@@ -331,34 +384,43 @@ export function Terrain3DView() {
       const siteName = siteData?.current_params?.name || marker.name;
 
       // Marker Sphere
-      const sphereGeom = new THREE.SphereGeometry(11, 16, 16);
+      const sphereGeom = new THREE.SphereGeometry(7.5, 16, 16);
       const sphereMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3, metalness: 0.2 });
       const sphere = new THREE.Mesh(sphereGeom, sphereMat);
-      sphere.position.set(x, y, z);
+      sphere.position.set(x, y + 5, z);
       sphere.userData.locationId = marker.location_id;
       scene.add(sphere);
       markerMeshes.push(sphere);
 
       // Vertical Beacon Light Beam
-      const rayGeom = new THREE.CylinderGeometry(1.5, 3.5, 110, 8);
-      const rayMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.4 });
+      const rayGeom = new THREE.CylinderGeometry(0.9, 2.2, 42, 8);
+      const rayMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.45 });
       const ray = new THREE.Mesh(rayGeom, rayMat);
-      ray.position.set(x, y + 55, z);
+      ray.position.set(x, y + 21, z);
       scene.add(ray);
       beaconRays.push(ray);
 
       // Ground Pulsing Ring
-      const ringGeom = new THREE.RingGeometry(13, 18, 24);
+      const ringGeom = new THREE.RingGeometry(8, 12, 24);
       ringGeom.rotateX(-Math.PI / 2);
       const ringMat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
       const ring = new THREE.Mesh(ringGeom, ringMat);
-      ring.position.set(x, y - 8, z);
+      ring.position.set(x, y + 0.4, z);
       scene.add(ring);
 
       // Floating 3D Station Label Billboard
       const billboard = createStationBillboard(siteName, marker.location_id, colorStr);
-      billboard.position.set(x, y + 32, z);
+      billboard.position.set(x, y + 17, z);
       scene.add(billboard);
+
+      markers.push({
+        location_id: marker.location_id,
+        elevation_m: marker.elevation_m,
+        sphere,
+        ray,
+        ring,
+        billboard,
+      });
     });
 
     function onClick(event) {
@@ -396,7 +458,7 @@ export function Terrain3DView() {
     }
     function onWheel(e) {
       e.preventDefault();
-      radius = Math.max(250, Math.min(1400, radius + e.deltaY * 0.5));
+      radius = Math.max(200, Math.min(1300, radius + e.deltaY * 0.45));
       camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
       camera.position.z = radius * Math.sin(phi) * Math.cos(theta);
       camera.position.y = radius * Math.cos(phi);
@@ -420,7 +482,18 @@ export function Terrain3DView() {
     }
     animate();
 
-    sceneRef.current = { renderer, scene, terrainMesh, satTex, offlineTex, fetchLiveSatellite };
+    sceneRef.current = {
+      renderer,
+      scene,
+      geometry,
+      terrainMesh,
+      markers,
+      treeGroup,
+      treePositions,
+      satTex,
+      offlineTex,
+      fetchLiveSatellite,
+    };
 
     return () => {
       cancelAnimationFrame(frameId);
@@ -482,20 +555,43 @@ export function Terrain3DView() {
         )}
       </div>
 
-      {/* Compact 3D View Toggle Controls */}
+      {/* Compact 3D View & Realistic Relief Controls */}
       <div className="terrain-view-toggle">
-        <button
-          className={`terrain-toggle-btn ${mode === "satellite" ? "active" : ""}`}
-          onClick={() => setMode("satellite")}
-        >
-          🛰️ Satellite
-        </button>
-        <button
-          className={`terrain-toggle-btn ${mode === "offline" ? "active" : ""}`}
-          onClick={() => setMode("offline")}
-        >
-          🌱 Landscape
-        </button>
+        <div className="terrain-toggle-group">
+          <button
+            className={`terrain-toggle-btn ${mode === "satellite" ? "active" : ""}`}
+            onClick={() => setMode("satellite")}
+            title="Photorealistic Esri ArcGIS Satellite Imagery"
+          >
+            🛰️ Satellite
+          </button>
+          <button
+            className={`terrain-toggle-btn ${mode === "offline" ? "active" : ""}`}
+            onClick={() => setMode("offline")}
+            title="Realistic Himalayan Topographic Landscape"
+          >
+            🌱 Landscape
+          </button>
+        </div>
+
+        <div className="terrain-toggle-divider" />
+
+        <div className="terrain-toggle-group">
+          <button
+            className={`terrain-toggle-btn ${reliefMode === "true" ? "active" : ""}`}
+            onClick={() => setReliefMode("true")}
+            title="Exact 1:1 true-to-life physical elevation scale (zero exaggeration)"
+          >
+            📐 1:1 Scale
+          </button>
+          <button
+            className={`terrain-toggle-btn ${reliefMode === "natural" ? "active" : ""}`}
+            onClick={() => setReliefMode("natural")}
+            title="Recommended: Cartographically balanced natural Himalayan elevation relief (1.4x)"
+          >
+            🏔️ Natural (1.4x)
+          </button>
+        </div>
       </div>
 
       <div ref={mountRef} style={{ height: "100%", width: "100%", cursor: "grab" }} />
