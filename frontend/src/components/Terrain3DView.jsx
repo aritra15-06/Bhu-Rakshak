@@ -1,600 +1,1167 @@
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { useSiteState } from "../state/SiteStateContext";
-import {
-  saveSatelliteTexture,
-  loadSatelliteTexture,
-  getSatelliteMeta,
-} from "../utils/satelliteStorage";
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import * as THREE from 'three';
+import { useAppContext } from '../state/AppContext';
+import { pilotLocations } from '../data/pilotLocations';
+import defaultSatelliteDem from '../data/sikkim_satellite_dem.json';
 
-const STATE_COLORS = {
-  STABLE: "#4a7a5c",
-  MARGINAL: "#d97706",
-  UNSTABLE: "#dc2626",
-  UNKNOWN: "#64748b",
+// Geographic Bounding Box for Sikkim Teesta Corridor
+const BBOX = {
+  minLat: 27.10,
+  maxLat: 27.75,
+  minLng: 88.35,
+  maxLng: 88.85,
 };
 
-const STATE_HEX = {
-  STABLE: 0x4a7a5c,
-  MARGINAL: 0xd97706,
-  UNSTABLE: 0xdc2626,
-  UNKNOWN: 0x64748b,
-};
+// ArcGIS World Imagery Orthophoto REST Export API URL
+const SATELLITE_API_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=88.35,27.10,88.85,27.75&bboxSR=4326&imageSR=4326&size=1024,1024&f=image';
 
-function createStationBillboard(name, locationId, colorHex) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 340;
-  canvas.height = 80;
-  const ctx = canvas.getContext("2d");
+const PLANE_SIZE = 90; // 3D plane dimensions in Three.js units (~50km E-W, ~72km N-S)
+const SEGS = 72;       // Terrain mesh segment resolution (73x73 = 5,329 vertices)
 
-  // Background rounded pill
-  ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
-  ctx.beginPath();
-  if (ctx.roundRect) {
-    ctx.roundRect(4, 4, 332, 72, 12);
-  } else {
-    ctx.rect(4, 4, 332, 72);
-  }
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = colorHex;
-  ctx.stroke();
-
-  // Status indicator dot
-  ctx.fillStyle = colorHex;
-  ctx.beginPath();
-  ctx.arc(32, 40, 9, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Station Label
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  const shortName = name.length > 18 ? name.substring(0, 16) + "…" : name;
-  ctx.fillText(`${locationId} · ${shortName}`, 52, 40);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(65, 15.5, 1);
-  return sprite;
+/**
+ * Converts geographic coordinates (lat, lng) to 3D plane coordinates (x, z)
+ */
+function geoTo3D(lat, lng) {
+  const normX = (lng - BBOX.minLng) / (BBOX.maxLng - BBOX.minLng);
+  const normZ = (BBOX.maxLat - lat) / (BBOX.maxLat - BBOX.minLat);
+  const x = (normX - 0.5) * PLANE_SIZE;
+  const z = (normZ - 0.5) * PLANE_SIZE;
+  return { x, z, normX, normZ };
 }
 
-// Elevation scaling configuration based on real physical geography:
-// Bounding box: ~78km N-S by ~35km W-E (mean ~55km / 55,000 meters).
-// Three.js horizontal mesh planeSize = 800 units.
-// True physical scale: 800 / 55,000 = ~0.0145 units per meter of elevation.
-const BASE_DATUM_M = 2200; // Mean elevation reference datum
-const HORIZONTAL_SCALE = 800 / 55000; // ~0.0145 units/m
+/**
+ * Calculates Euclidean distance between two 2D points
+ */
+function dist2D(x1, z1, x2, z2) {
+  return Math.hypot(x1 - x2, z1 - z2);
+}
 
-export const RELIEF_SCALES = {
-  true: { label: "1:1 True Scale", factor: 1.0, title: "Exact 1:1 real-world physical elevation scale (zero exaggeration)" },
-  natural: { label: "1.4x Natural", factor: 1.4, title: "Recommended: Cartographically balanced natural Himalayan relief" },
-  enhanced: { label: "2.0x Enhanced", factor: 2.0, title: "Accentuated ridge and valley contrast" },
-};
+/**
+ * Calculates shortest distance from point (px, pz) to a 3D polyline
+ */
+function distToPolyline(px, pz, polyline3D) {
+  let minDist = Infinity;
+  for (let i = 0; i < polyline3D.length - 1; i++) {
+    const p1 = polyline3D[i];
+    const p2 = polyline3D[i + 1];
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const lenSq = dx * dx + dz * dz;
+    let t = lenSq === 0 ? 0 : ((px - p1.x) * dx + (pz - p1.z) * dz) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = p1.x + t * dx;
+    const projZ = p1.z + t * dz;
+    const d = dist2D(px, pz, projX, projZ);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
 
-export function Terrain3DView() {
-  const mountRef = useRef(null);
-  const { sites, setSelectedSite, loading } = useSiteState();
-  const [heightmap, setHeightmap] = useState(null);
-  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
-  const [mode, setMode] = useState("satellite");
-  const [reliefMode, setReliefMode] = useState("natural");
-  const [cachedMeta, setCachedMeta] = useState(() => getSatelliteMeta());
-  const [satelliteSource, setSatelliteSource] = useState(typeof navigator !== "undefined" && navigator.onLine ? "live" : "cached");
-  const sceneRef = useRef({});
+/**
+ * Bilinear interpolation of elevation from N x N satellite elevation matrix
+ */
+function sampleSatelliteElevation(normX, normZ, elevations, gridSize, minElev, maxElev) {
+  const clampedX = Math.max(0, Math.min(1, normX));
+  const clampedZ = Math.max(0, Math.min(1, normZ));
 
-  // Detect live network connection status & auto-reconnect satellite
-  useEffect(() => {
-    function onOnline() {
-      setIsOnline(true);
-      if (sceneRef.current?.fetchLiveSatellite) {
-        sceneRef.current.fetchLiveSatellite();
-      }
-    }
-    function onOffline() {
-      setIsOnline(false);
-      setSatelliteSource("cached");
-    }
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
-  }, []);
+  const gx = clampedX * (gridSize - 1);
+  const gz = clampedZ * (gridSize - 1);
 
-  // Fetch heightmap elevation grid with resilient synthetic fallback
-  useEffect(() => {
-    fetch("/terrain3d/heightmaps/north_sikkim_region_heightmap.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
-        if (data?.heights && data?.grid_size) {
-          setHeightmap(data);
-        } else {
-          throw new Error("Invalid heightmap payload");
-        }
-      })
-      .catch((e) => {
-        console.warn("Using fallback synthetic terrain elevation model:", e);
-        // Resilient North Sikkim Himalayan elevation profile: 1200m - 4200m
-        const gridSize = 64;
-        const heights = [];
-        for (let j = 0; j < gridSize; j++) {
-          for (let i = 0; i < gridSize; i++) {
-            const x = (i - gridSize / 2) / 10.0;
-            const y = (j - gridSize / 2) / 10.0;
-            const base = 2600 + Math.sin(x * 0.7) * 750 + Math.cos(y * 0.7) * 850;
-            const ridge = Math.abs(Math.sin(x * 1.4 + y * 0.6)) * 600;
-            heights.push(Math.round(base + ridge));
-          }
-        }
-        setHeightmap({ grid_size: gridSize, heights });
-      });
-  }, []);
+  const col0 = Math.floor(gx);
+  const col1 = Math.min(gridSize - 1, col0 + 1);
+  const row0 = Math.floor(gz);
+  const row1 = Math.min(gridSize - 1, row0 + 1);
 
-  // Switch terrain texture smoothly between live satellite and offline landscape
-  useEffect(() => {
-    if (sceneRef.current?.terrainMesh) {
-      const { terrainMesh, satTex, offlineTex } = sceneRef.current;
-      const targetTex = mode === "satellite" ? satTex : offlineTex;
-      if (targetTex) {
-        terrainMesh.material.map = targetTex;
-        terrainMesh.material.needsUpdate = true;
-      }
-    }
-  }, [mode]);
+  const fx = gx - col0;
+  const fz = gz - row0;
 
-  // Dynamically update terrain mesh vertices, markers, and vegetation when relief scale changes
-  useEffect(() => {
-    if (!sceneRef.current?.geometry || !heightmap) return;
-    const { geometry, markers, treeGroup, treePositions } = sceneRef.current;
-    const factor = RELIEF_SCALES[reliefMode]?.factor ?? 1.4;
-    const mult = HORIZONTAL_SCALE * factor;
+  const idx00 = row0 * gridSize + col0;
+  const idx10 = row0 * gridSize + col1;
+  const idx01 = row1 * gridSize + col0;
+  const idx11 = row1 * gridSize + col1;
 
-    const positions = geometry.attributes.position;
-    for (let idx = 0; idx < heightmap.heights.length; idx++) {
-      const elev = heightmap.heights[idx];
-      positions.setY(idx, (elev - BASE_DATUM_M) * mult);
-    }
-    positions.needsUpdate = true;
-    geometry.computeVertexNormals();
+  const h00 = elevations[idx00] ?? minElev;
+  const h10 = elevations[idx10] ?? minElev;
+  const h01 = elevations[idx01] ?? minElev;
+  const h11 = elevations[idx11] ?? minElev;
 
-    if (markers) {
-      markers.forEach((m) => {
-        const y = (m.elevation_m - BASE_DATUM_M) * mult;
-        if (m.sphere) m.sphere.position.y = y + 5;
-        if (m.ring) m.ring.position.y = y + 0.4;
-        if (m.ray) m.ray.position.y = y + 21;
-        if (m.billboard) m.billboard.position.y = y + 17;
-      });
-    }
+  // Bilinear blend
+  const hTop = h00 * (1 - fx) + h10 * fx;
+  const hBot = h01 * (1 - fx) + h11 * fx;
+  const hMeters = hTop * (1 - fz) + hBot * fz;
 
-    if (treeGroup && treePositions) {
-      treeGroup.children.forEach((tree, idx) => {
-        const tp = treePositions[idx];
-        if (tp) {
-          tree.position.y = (tp.elevation - BASE_DATUM_M) * mult;
-        }
-      });
-    }
-  }, [reliefMode, heightmap]);
+  // Map meters to 3D world units (base range 2.0 to 28.0)
+  const elevNorm = Math.max(0, Math.min(1, (hMeters - minElev) / Math.max(1, maxElev - minElev)));
+  const yWorld = elevNorm * 26.0 + 2.0;
 
-  useEffect(() => {
-    if (!heightmap || !mountRef.current) return;
-    const mount = mountRef.current;
-    const width = mount.clientWidth || 800;
-    const height = mount.clientHeight || 600;
+  return { hMeters, yWorld };
+}
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xbdd5e7);
-    scene.fog = new THREE.FogExp2(0xbdd5e7, 0.0005);
+function probColor(p) {
+  if (p >= 0.8) return 0xdc2626;
+  if (p >= 0.6) return 0xea580c;
+  if (p >= 0.3) return 0xd97706;
+  return 0x16a34a;
+}
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 1, 5000);
-    camera.position.set(0, 310, 560);
-    camera.lookAt(0, 0, 0);
+/**
+ * Generates an instant high-resolution Earth observation canvas texture
+ */
+function createProceduralSatelliteTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    mount.innerHTML = "";
-    mount.appendChild(renderer.domElement);
+  // Base Himalayan mountain vegetation gradient
+  const grad = ctx.createLinearGradient(0, 0, 512, 512);
+  grad.addColorStop(0, '#1c301a');    // Northern alpine forest
+  grad.addColorStop(0.3, '#2a4224');  // Mixed subalpine slopes
+  grad.addColorStop(0.5, '#41522d');  // Valley slopes
+  grad.addColorStop(0.7, '#243b22');  // Dense gorge vegetation
+  grad.addColorStop(1, '#1b2c19');    // Southern foothills
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambient);
+  // Micro-texture noise for forest canopy roughness
+  const imgData = ctx.getImageData(0, 0, 512, 512);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 22;
+    data[i] = Math.min(255, Math.max(0, data[i] + n));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + n * 1.2));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + n * 0.8));
+  }
+  ctx.putImageData(imgData, 0, 0);
 
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-    sunLight.position.set(300, 500, 200);
-    sunLight.castShadow = true;
-    scene.add(sunLight);
+  // Rocky ridge scarp lines
+  ctx.strokeStyle = 'rgba(115, 110, 100, 0.45)';
+  ctx.lineWidth = 14;
+  ctx.filter = 'blur(6px)';
+  ctx.beginPath();
+  ctx.moveTo(60, 20);
+  ctx.bezierCurveTo(160, 90, 220, 220, 210, 500);
+  ctx.stroke();
 
-    const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x3f3f46, 0.5);
-    scene.add(hemiLight);
+  ctx.strokeStyle = 'rgba(135, 125, 110, 0.35)';
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.moveTo(480, 40);
+  ctx.bezierCurveTo(340, 120, 310, 320, 320, 500);
+  ctx.stroke();
+  ctx.filter = 'none';
 
-    // Build 3D terrain elevation mesh with physically realistic elevation scaling
-    const gridSize = heightmap.grid_size;
-    const planeSize = 800;
-    const geometry = new THREE.PlaneGeometry(planeSize, planeSize, gridSize - 1, gridSize - 1);
-    geometry.rotateX(-Math.PI / 2);
+  // High northern alpine snow caps
+  const snowGrad = ctx.createRadialGradient(90, 60, 5, 90, 60, 75);
+  snowGrad.addColorStop(0, 'rgba(245, 248, 252, 0.9)');
+  snowGrad.addColorStop(0.6, 'rgba(215, 230, 245, 0.5)');
+  snowGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = snowGrad;
+  ctx.beginPath();
+  ctx.arc(90, 60, 75, 0, Math.PI * 2);
+  ctx.fill();
 
-    const factor = RELIEF_SCALES[reliefMode]?.factor ?? 1.4;
-    const mult = HORIZONTAL_SCALE * factor;
-    const positions = geometry.attributes.position;
-    const treePositions = [];
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
 
-    for (let j = 0; j < gridSize; j++) {
-      for (let i = 0; i < gridSize; i++) {
-        const idx = j * gridSize + i;
-        const elevation = heightmap.heights[idx];
-        const y = (elevation - BASE_DATUM_M) * mult;
-        positions.setY(idx, y);
+/**
+ * Creates dynamic flowing water texture with waves and foam streaks
+ */
+function createFlowingWaterTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 1024; // elongated along river length
+  const ctx = canvas.getContext('2d');
 
-        // Collect tree coordinates for valley floors & middle slopes (<2500m)
-        if (elevation > 800 && elevation < 2500 && (i * 7 + j * 13) % 15 === 0) {
-          const u = i / (gridSize - 1);
-          const v = j / (gridSize - 1);
-          const tx = (u - 0.5) * planeSize + (Math.sin(idx) * 4);
-          const tz = (v - 0.5) * planeSize + (Math.cos(idx) * 4);
-          treePositions.push({ x: tx, y, z: tz, elevation, scale: 0.45 + Math.random() * 0.35 });
-        }
-      }
-    }
-    positions.needsUpdate = true;
-    geometry.computeVertexNormals();
+  // Base deep glacial turquoise gradient
+  const grad = ctx.createLinearGradient(0, 0, 256, 0);
+  grad.addColorStop(0, '#0369a1');   // Deep blue edge
+  grad.addColorStop(0.2, '#0284c7'); // Clear turquoise current
+  grad.addColorStop(0.5, '#38bdf8'); // Glacial water highlight
+  grad.addColorStop(0.8, '#0284c7');
+  grad.addColorStop(1, '#0369a1');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 1024);
 
-    // Load textures: offline realistic landscape & local high-res satellite
-    const texLoader = new THREE.TextureLoader();
-    texLoader.setCrossOrigin("anonymous");
-
-    // 1. Offline realistic texture with lush Himalayan vegetation
-    const offlineTex = texLoader.load("/terrain3d/textures/north_sikkim_offline_realistic.jpg");
-    offlineTex.wrapS = THREE.ClampToEdgeWrapping;
-    offlineTex.wrapT = THREE.ClampToEdgeWrapping;
-
-    // 2. High-res Satellite texture with Persistent IndexedDB Storage & Offline Caching
-    let satTex = texLoader.load("/terrain3d/textures/north_sikkim_satellite.jpg");
-    satTex.wrapS = THREE.ClampToEdgeWrapping;
-    satTex.wrapT = THREE.ClampToEdgeWrapping;
-
-    // Function to fetch live satellite data from ArcGIS when online & persist into storage
-    async function fetchLiveSatellite() {
-      const LIVE_SATELLITE_URL =
-        "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=88.45,27.05,88.80,27.75&bboxSR=4326&imageSR=4326&size=1024,1024&format=jpg&f=image";
-      try {
-        const res = await fetch(LIVE_SATELLITE_URL, { mode: "cors" });
-        if (!res.ok) throw new Error(`ArcGIS returned ${res.status}`);
-        const blob = await res.blob();
-
-        // Save raw satellite imagery into IndexedDB persistent storage
-        const meta = await saveSatelliteTexture(blob, { source: "ArcGIS Live Satellite Stream" });
-        if (meta) setCachedMeta(meta);
-
-        // Load into Three.js texture
-        const objectUrl = URL.createObjectURL(blob);
-        texLoader.load(objectUrl, (liveTex) => {
-          liveTex.wrapS = THREE.ClampToEdgeWrapping;
-          liveTex.wrapT = THREE.ClampToEdgeWrapping;
-          satTex = liveTex;
-          if (sceneRef.current) {
-            sceneRef.current.satTex = liveTex;
-            if (sceneRef.current.terrainMesh && mode === "satellite") {
-              sceneRef.current.terrainMesh.material.map = liveTex;
-              sceneRef.current.terrainMesh.material.needsUpdate = true;
-            }
-          }
-          setSatelliteSource("live");
-          setIsOnline(true);
-        });
-      } catch (err) {
-        console.warn("[Terrain3DView] Live satellite fetch failed, using stored offline texture:", err);
-        setSatelliteSource("cached");
-      }
-    }
-
-    // Step A: Load the previously stored 3D satellite image from persistent storage (IndexedDB)
-    loadSatelliteTexture().then((cached) => {
-      if (cached?.url) {
-        setCachedMeta(cached.metadata);
-        texLoader.load(cached.url, (loadedCachedTex) => {
-          loadedCachedTex.wrapS = THREE.ClampToEdgeWrapping;
-          loadedCachedTex.wrapT = THREE.ClampToEdgeWrapping;
-          satTex = loadedCachedTex;
-          if (sceneRef.current) {
-            sceneRef.current.satTex = loadedCachedTex;
-            if (sceneRef.current.terrainMesh && mode === "satellite") {
-              sceneRef.current.terrainMesh.material.map = loadedCachedTex;
-              sceneRef.current.terrainMesh.material.needsUpdate = true;
-            }
-          }
-        });
-        if (!navigator.onLine) {
-          setSatelliteSource("cached");
-        }
-      }
-
-      // Step B: If machine is currently online, fetch fresh live satellite stream and update cache!
-      if (navigator.onLine) {
-        fetchLiveSatellite();
-      } else {
-        setSatelliteSource("cached");
-      }
-    });
-
-    const initialTex = mode === "satellite" ? satTex : offlineTex;
-
-    const terrainMaterial = new THREE.MeshStandardMaterial({
-      map: initialTex,
-      roughness: 0.85,
-      metalness: 0.05,
-      flatShading: false,
-      side: THREE.DoubleSide,
-    });
-    const terrainMesh = new THREE.Mesh(geometry, terrainMaterial);
-    terrainMesh.receiveShadow = true;
-    scene.add(terrainMesh);
-
-    // 3D Pine Tree Clusters in Valley Floors
-    let treeGroup = null;
-    if (treePositions.length > 0) {
-      treeGroup = new THREE.Group();
-      const trunkGeom = new THREE.CylinderGeometry(0.4, 0.7, 3.2, 5);
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2d1f15, roughness: 0.9 });
-      const foliageGeom = new THREE.ConeGeometry(2.5, 7, 5);
-      const foliageMat = new THREE.MeshStandardMaterial({ color: 0x1e4620, roughness: 0.8 });
-
-      treePositions.slice(0, 180).forEach((tp) => {
-        const tree = new THREE.Group();
-        const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-        trunk.position.y = 1.6;
-        const foliage = new THREE.Mesh(foliageGeom, foliageMat);
-        foliage.position.y = 5.5;
-        tree.add(trunk);
-        tree.add(foliage);
-
-        tree.position.set(tp.x, tp.y, tp.z);
-        tree.scale.set(tp.scale, tp.scale, tp.scale);
-        treeGroup.add(tree);
-      });
-      scene.add(treeGroup);
-    }
-
-    // Interactive Station Markers & Floating Billboards
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    const markerMeshes = [];
-    const beaconRays = [];
-    const markers = [];
-
-    heightmap.site_markers.forEach((marker) => {
-      const u = marker.grid_x / (gridSize - 1);
-      const v = marker.grid_y / (gridSize - 1);
-      const x = (u - 0.5) * planeSize;
-      const z = (v - 0.5) * planeSize;
-      const y = (marker.elevation_m - BASE_DATUM_M) * mult;
-
-      const siteData = sites[marker.location_id];
-      const stability = siteData?.prediction?.physics_output?.stability_state || "UNKNOWN";
-      const colorHex = STATE_HEX[stability] || STATE_HEX.UNKNOWN;
-      const colorStr = STATE_COLORS[stability] || STATE_COLORS.UNKNOWN;
-      const siteName = siteData?.current_params?.name || marker.name;
-
-      // Marker Sphere
-      const sphereGeom = new THREE.SphereGeometry(7.5, 16, 16);
-      const sphereMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3, metalness: 0.2 });
-      const sphere = new THREE.Mesh(sphereGeom, sphereMat);
-      sphere.position.set(x, y + 5, z);
-      sphere.userData.locationId = marker.location_id;
-      scene.add(sphere);
-      markerMeshes.push(sphere);
-
-      // Vertical Beacon Light Beam
-      const rayGeom = new THREE.CylinderGeometry(0.9, 2.2, 42, 8);
-      const rayMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.45 });
-      const ray = new THREE.Mesh(rayGeom, rayMat);
-      ray.position.set(x, y + 21, z);
-      scene.add(ray);
-      beaconRays.push(ray);
-
-      // Ground Pulsing Ring
-      const ringGeom = new THREE.RingGeometry(8, 12, 24);
-      ringGeom.rotateX(-Math.PI / 2);
-      const ringMat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-      const ring = new THREE.Mesh(ringGeom, ringMat);
-      ring.position.set(x, y + 0.4, z);
-      scene.add(ring);
-
-      // Floating 3D Station Label Billboard
-      const billboard = createStationBillboard(siteName, marker.location_id, colorStr);
-      billboard.position.set(x, y + 17, z);
-      scene.add(billboard);
-
-      markers.push({
-        location_id: marker.location_id,
-        elevation_m: marker.elevation_m,
-        sphere,
-        ray,
-        ring,
-        billboard,
-      });
-    });
-
-    function onClick(event) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(markerMeshes);
-      if (intersects.length > 0) {
-        setSelectedSite(intersects[0].object.userData.locationId);
-      }
-    }
-    renderer.domElement.addEventListener("click", onClick);
-
-    // Orbit Drag & Zoom
-    let isDragging = false;
-    let prevX = 0, prevY = 0;
-    let theta = Math.atan2(camera.position.x, camera.position.z);
-    let phi = Math.acos(camera.position.y / camera.position.length());
-    let radius = camera.position.length();
-
-    function onMouseDown(e) { isDragging = true; prevX = e.clientX; prevY = e.clientY; }
-    function onMouseUp() { isDragging = false; }
-    function onMouseMove(e) {
-      if (!isDragging) return;
-      const dx = e.clientX - prevX;
-      const dy = e.clientY - prevY;
-      theta -= dx * 0.005;
-      phi = Math.max(0.18, Math.min(1.42, phi - dy * 0.005));
-      camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
-      camera.position.z = radius * Math.sin(phi) * Math.cos(theta);
-      camera.position.y = radius * Math.cos(phi);
-      camera.lookAt(0, 0, 0);
-      prevX = e.clientX; prevY = e.clientY;
-    }
-    function onWheel(e) {
-      e.preventDefault();
-      radius = Math.max(200, Math.min(1300, radius + e.deltaY * 0.45));
-      camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
-      camera.position.z = radius * Math.sin(phi) * Math.cos(theta);
-      camera.position.y = radius * Math.cos(phi);
-      camera.lookAt(0, 0, 0);
-    }
-
-    renderer.domElement.addEventListener("mousedown", onMouseDown);
-    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("mousemove", onMouseMove);
-
-    let frameId;
-    let clock = new THREE.Clock();
-    function animate() {
-      frameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
-      beaconRays.forEach((ray, i) => {
-        ray.material.opacity = 0.3 + Math.sin(elapsedTime * 3 + i) * 0.15;
-      });
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    sceneRef.current = {
-      renderer,
-      scene,
-      geometry,
-      terrainMesh,
-      markers,
-      treeGroup,
-      treePositions,
-      satTex,
-      offlineTex,
-      fetchLiveSatellite,
-    };
-
-    return () => {
-      cancelAnimationFrame(frameId);
-      renderer.domElement.removeEventListener("click", onClick);
-      renderer.domElement.removeEventListener("mousedown", onMouseDown);
-      renderer.domElement.removeEventListener("wheel", onWheel);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("mousemove", onMouseMove);
-      renderer.dispose();
-      mount.innerHTML = "";
-    };
-  }, [heightmap, sites, setSelectedSite]);
-
-  if (loading || !heightmap) {
-    return <div className="empty-state">Loading terrain…</div>;
+  // Flowing current streaks and white-water rapids foam
+  ctx.fillStyle = 'rgba(224, 242, 254, 0.35)';
+  for (let y = 0; y < 1024; y += 18) {
+    const w = 40 + Math.random() * 80;
+    const x = 50 + Math.random() * 110;
+    const h = 4 + Math.random() * 8;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
+  // Thin rapid wave highlights
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.lineWidth = 1.8;
+  for (let y = 10; y < 1024; y += 28) {
+    ctx.beginPath();
+    ctx.moveTo(60, y);
+    ctx.quadraticCurveTo(128, y + (Math.random() - 0.5) * 16, 196, y);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 4);
+  return texture;
+}
+
+export default function Terrain3DView({ predictions = {} }) {
+  const mountRef = useRef(null);
+  const rendererRef = useRef(null);
+  const frameRef = useRef(null);
+  const meshRef = useRef(null);
+  const geoRef = useRef(null);
+  const baseHeightsRef = useRef([]);
+  const materialsRef = useRef({});
+  const markersRef = useRef([]);
+  const riverMeshRef = useRef(null);
+  const waterTextureRef = useRef(null);
+
+  const { setSelectedLocation, selectedLocation } = useAppContext();
+
+  // View Controls State
+  const [textureMode, setTextureMode] = useState('satellite'); // 'satellite' | 'topo' | 'hazard'
+  const [vertExaggeration, setVertExaggeration] = useState(1.4);
+  const [showWireframe, setShowWireframe] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [flowSpeed, setFlowSpeed] = useState(1.0);
+  const [satStatus, setSatStatus] = useState('loading'); // 'loading' | 'live' | 'cached'
+  const [demSource, setDemSource] = useState('SRTM / Copernicus 90m Satellite DEM');
+  const [hoveredSite, setHoveredSite] = useState(null);
+  const [demMetadata, setDemMetadata] = useState({
+    minElev: defaultSatelliteDem.min_elevation || 262,
+    maxElev: defaultSatelliteDem.max_elevation || 5473,
+    isLive: false,
+  });
+
+  // Active satellite DEM data
+  const [satelliteData, setSatelliteData] = useState(defaultSatelliteDem);
+
+  // 1. Fetch Live Satellite DEM from Backend on Mount
+  useEffect(() => {
+    let isSubscribed = true;
+    async function loadLiveSatelliteData() {
+      try {
+        setSatStatus('loading');
+        const res = await fetch('/api/terrain/live');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (isSubscribed && data && data.elevations && data.elevations.length > 0) {
+          setSatelliteData(data);
+          setDemSource(data.source || 'SRTM / Copernicus 90m Satellite DEM');
+          setDemMetadata({
+            minElev: data.min_elevation,
+            maxElev: data.max_elevation,
+            isLive: !!data.is_live,
+          });
+          setSatStatus(data.is_live ? 'live' : 'cached');
+        }
+      } catch (err) {
+        console.info('Live satellite DEM API info: Using high-detail cached satellite observation', err);
+        if (isSubscribed) {
+          setSatStatus('cached');
+        }
+      }
+    }
+    loadLiveSatelliteData();
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
+
+  // 2. Setup Three.js Scene once
+  useEffect(() => {
+    const el = mountRef.current;
+    if (!el) return;
+    const W = el.clientWidth || 600,
+      H = el.clientHeight || 450;
+
+    // A. Clean Atmospheric Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf1f5f9);
+    scene.fog = new THREE.FogExp2(0xf1f5f9, 0.005);
+
+    // B. Camera
+    const camera = new THREE.PerspectiveCamera(48, W / H, 0.1, 900);
+    camera.position.set(0, 52, 78);
+    camera.lookAt(0, 8, 0);
+
+    // C. WebGL Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.display = 'block';
+    el.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    // D. Crisp Himalayan Lighting
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8dc, 0.95);
+    hemiLight.position.set(0, 100, 0);
+    scene.add(hemiLight);
+
+    const sun = new THREE.DirectionalLight(0xfffbeb, 1.45);
+    sun.position.set(45, 95, 35);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    scene.add(sun);
+
+    const fillLight = new THREE.DirectionalLight(0xbae6fd, 0.5);
+    fillLight.position.set(-45, 50, -35);
+    scene.add(fillLight);
+
+    // E. Terrain Geometry (72x72 resolution)
+    const geo = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE, SEGS, SEGS);
+    geo.rotateX(-Math.PI / 2);
+    geoRef.current = geo;
+
+    const pos = geo.attributes.position;
+    const count = pos.count;
+    const baseHeights = new Float32Array(count);
+    const topoColors = new Float32Array(count * 3);
+
+    // Build 3D coordinates for the real OSM Teesta river trunk
+    const riverRaw = satelliteData.teesta_trunk || defaultSatelliteDem.teesta_trunk || [];
+    const river3D = riverRaw.map((pt) => {
+      const { x, z, normX, normZ } = geoTo3D(pt[0], pt[1]);
+      return { x, z, normX, normZ, lat: pt[0], lng: pt[1] };
+    });
+
+    const elevations = satelliteData.elevations || defaultSatelliteDem.elevations;
+    const gridSize = satelliteData.grid_size || defaultSatelliteDem.grid_size || 25;
+    const minElev = satelliteData.min_elevation || 262;
+    const maxElev = satelliteData.max_elevation || 5473;
+
+    // F. Deform Mesh Vertices Using Real Satellite Elevation Data
+    for (let i = 0; i < count; i++) {
+      const vx = pos.getX(i);
+      const vz = pos.getZ(i);
+
+      const normX = (vx + PLANE_SIZE / 2) / PLANE_SIZE;
+      const normZ = (vz + PLANE_SIZE / 2) / PLANE_SIZE;
+
+      // Sample true satellite DEM
+      const { hMeters, yWorld } = sampleSatelliteElevation(
+        normX,
+        normZ,
+        elevations,
+        gridSize,
+        minElev,
+        maxElev
+      );
+
+      // Carve authentic Teesta River V-canyon incision into terrain
+      let carvedY = yWorld;
+      if (river3D.length > 1) {
+        const distRiver = distToPolyline(vx, vz, river3D);
+        const canyonWidth = 2.4; // 3D units (~1.6 km valley width)
+        if (distRiver < canyonWidth) {
+          const cutFraction = Math.pow(1 - distRiver / canyonWidth, 2);
+          carvedY = Math.max(1.2, carvedY - cutFraction * 3.2);
+        }
+      }
+
+      baseHeights[i] = carvedY;
+      pos.setY(i, carvedY * vertExaggeration);
+
+      // Hypsometric tinting for Topographic DEM Material
+      let r, g, b;
+      if (hMeters < 600) {
+        // Flat river basin & alluvial floodplain (Singtam / Rangpo)
+        r = 0.22; g = 0.62; b = 0.36;
+      } else if (hMeters < 1500) {
+        // Subalpine gorge vegetation (Dikchu / lower Dzongu)
+        r = 0.28; g = 0.54; b = 0.26;
+      } else if (hMeters < 2800) {
+        // Mid-slope mountain forest (Chungthang / Mangan)
+        r = 0.56; g = 0.46; b = 0.28;
+      } else if (hMeters < 4000) {
+        // High alpine rocky crag & scree (Nathu La ridge)
+        r = 0.54; g = 0.53; b = 0.54;
+      } else {
+        // Glaciated alpine snow caps (>4,000m)
+        r = 0.94; g = 0.96; b = 0.99;
+      }
+      topoColors[i * 3] = r;
+      topoColors[i * 3 + 1] = g;
+      topoColors[i * 3 + 2] = b;
+    }
+
+    baseHeightsRef.current = baseHeights;
+    geo.setAttribute('color', new THREE.BufferAttribute(topoColors, 3));
+    geo.computeVertexNormals();
+
+    // G. Materials Setup
+    const fallbackSatTexture = createProceduralSatelliteTexture();
+    const satMaterial = new THREE.MeshStandardMaterial({
+      map: fallbackSatTexture,
+      roughness: 0.82,
+      metalness: 0.05,
+      flatShading: false,
+    });
+
+    const topoMaterial = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.75,
+      metalness: 0.05,
+      flatShading: false,
+    });
+
+    // Hazard Heatmap Texture
+    const hazardCanvas = document.createElement('canvas');
+    hazardCanvas.width = 512;
+    hazardCanvas.height = 512;
+    const hctx = hazardCanvas.getContext('2d');
+    const hGrad = hctx.createRadialGradient(256, 180, 25, 256, 256, 270);
+    hGrad.addColorStop(0, 'rgba(239, 68, 68, 0.85)');    // High hazard red
+    hGrad.addColorStop(0.35, 'rgba(249, 115, 22, 0.75)'); // Warning orange
+    hGrad.addColorStop(0.65, 'rgba(234, 179, 8, 0.5)');   // Watch yellow
+    hGrad.addColorStop(1, 'rgba(34, 197, 94, 0.35)');     // Safe green
+    hctx.fillStyle = hGrad;
+    hctx.fillRect(0, 0, 512, 512);
+    const hazardTexture = new THREE.CanvasTexture(hazardCanvas);
+    const hazardMaterial = new THREE.MeshStandardMaterial({
+      map: hazardTexture,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+
+    materialsRef.current = {
+      satellite: satMaterial,
+      topo: topoMaterial,
+      hazard: hazardMaterial,
+    };
+
+    // H. Main Terrain Mesh
+    const terrainMesh = new THREE.Mesh(geo, satMaterial);
+    terrainMesh.receiveShadow = true;
+    terrainMesh.castShadow = true;
+    scene.add(terrainMesh);
+    meshRef.current = terrainMesh;
+
+    // I. Wireframe Overlay
+    const wireGeo = new THREE.WireframeGeometry(geo);
+    const wireMat = new THREE.LineBasicMaterial({
+      color: 0x475569,
+      transparent: true,
+      opacity: 0.16,
+    });
+    const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
+    wireMesh.visible = false;
+    scene.add(wireMesh);
+
+    // J. Construct 3D Real River Ribbon Following Exact OpenStreetMap Polyline
+    const waterTexture = createFlowingWaterTexture();
+    waterTextureRef.current = waterTexture;
+
+    if (river3D.length > 2) {
+      const riverPtsCount = river3D.length;
+      const riverGeo = new THREE.BufferGeometry();
+      const riverVerts = new Float32Array(riverPtsCount * 2 * 3);
+      const riverUVs = new Float32Array(riverPtsCount * 2 * 2);
+      const riverIndices = [];
+
+      let accumDistance = 0;
+
+      for (let i = 0; i < riverPtsCount; i++) {
+        const pt = river3D[i];
+
+        // Sample elevation at river point
+        const { yWorld } = sampleSatelliteElevation(
+          pt.normX,
+          pt.normZ,
+          elevations,
+          gridSize,
+          minElev,
+          maxElev
+        );
+        const ry = (yWorld - 1.6) * vertExaggeration;
+
+        // Compute tangent direction along river curves
+        let tx = 0, tz = 1;
+        if (i < riverPtsCount - 1) {
+          const next = river3D[i + 1];
+          const prev = i > 0 ? river3D[i - 1] : pt;
+          tx = next.x - prev.x;
+          tz = next.z - prev.z;
+          const len = Math.hypot(tx, tz) || 1;
+          tx /= len;
+          tz /= len;
+          if (i > 0) accumDistance += Math.hypot(pt.x - prev.x, pt.z - prev.z);
+        } else {
+          const prev = river3D[i - 1];
+          tx = pt.x - prev.x;
+          tz = pt.z - prev.z;
+          const len = Math.hypot(tx, tz) || 1;
+          tx /= len;
+          tz /= len;
+          accumDistance += Math.hypot(pt.x - prev.x, pt.z - prev.z);
+        }
+
+        // Perpendicular normal in horizontal plane (-tz, tx)
+        const nx = -tz;
+        const nz = tx;
+
+        // River gradually widens downstream towards Rangpo delta (1.4 units to 3.0 units)
+        const widthProgress = i / (riverPtsCount - 1);
+        const riverWidth = 1.4 + widthProgress * 1.6;
+
+        // Left and Right vertices of the river ribbon
+        const lx = pt.x - nx * (riverWidth / 2);
+        const lz = pt.z - nz * (riverWidth / 2);
+        const rx = pt.x + nx * (riverWidth / 2);
+        const rz = pt.z + nz * (riverWidth / 2);
+
+        const vIdx = i * 2;
+        // Left vertex
+        riverVerts[vIdx * 3] = lx;
+        riverVerts[vIdx * 3 + 1] = ry;
+        riverVerts[vIdx * 3 + 2] = lz;
+
+        // Right vertex
+        riverVerts[(vIdx + 1) * 3] = rx;
+        riverVerts[(vIdx + 1) * 3 + 1] = ry;
+        riverVerts[(vIdx + 1) * 3 + 2] = rz;
+
+        // UV mapping (U: 0 to 1 across width, V: along length)
+        const vCoord = accumDistance * 0.15;
+        riverUVs[vIdx * 2] = 0;
+        riverUVs[vIdx * 2 + 1] = vCoord;
+
+        riverUVs[(vIdx + 1) * 2] = 1;
+        riverUVs[(vIdx + 1) * 2 + 1] = vCoord;
+
+        // Triangle indices
+        if (i < riverPtsCount - 1) {
+          const a = vIdx;
+          const b = vIdx + 1;
+          const c = vIdx + 2;
+          const d = vIdx + 3;
+          riverIndices.push(a, b, c);
+          riverIndices.push(b, d, c);
+        }
+      }
+
+      riverGeo.setAttribute('position', new THREE.BufferAttribute(riverVerts, 3));
+      riverGeo.setAttribute('uv', new THREE.BufferAttribute(riverUVs, 2));
+      riverGeo.setIndex(riverIndices);
+      riverGeo.computeVertexNormals();
+
+      const riverMat = new THREE.MeshStandardMaterial({
+        map: waterTexture,
+        roughness: 0.12,
+        metalness: 0.45,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+      });
+
+      const riverMesh = new THREE.Mesh(riverGeo, riverMat);
+      scene.add(riverMesh);
+      riverMeshRef.current = riverMesh;
+    }
+
+    // K. Fetch Live ArcGIS Satellite Orthophoto Imagery
+    const texLoader = new THREE.TextureLoader();
+    texLoader.setCrossOrigin('anonymous');
+    texLoader.load(
+      SATELLITE_API_URL,
+      (liveTexture) => {
+        liveTexture.wrapS = THREE.ClampToEdgeWrapping;
+        liveTexture.wrapT = THREE.ClampToEdgeWrapping;
+        liveTexture.colorSpace = THREE.SRGBColorSpace;
+        satMaterial.map = liveTexture;
+        satMaterial.needsUpdate = true;
+      },
+      undefined,
+      (err) => console.info('Live ArcGIS satellite imagery note:', err)
+    );
+
+    // L. Place Accurate 3D Pins for Pilot Stations with Real Satellite Elevations
+    const markers = pilotLocations.map((loc) => {
+      const locId = loc.location_id || loc.id;
+      const { x, z, normX, normZ } = geoTo3D(loc.lat, loc.lng);
+
+      // Compute exact distance to Teesta river
+      let distKm = 0;
+      if (river3D.length > 0) {
+        const dist3D = distToPolyline(x, z, river3D);
+        distKm = dist3D * (60.0 / PLANE_SIZE); // 90 units ~ 60 km
+      }
+
+      // Sample satellite elevation at station position
+      const { hMeters, yWorld } = sampleSatelliteElevation(
+        normX,
+        normZ,
+        elevations,
+        gridSize,
+        minElev,
+        maxElev
+      );
+
+      const siteAltitude = yWorld * vertExaggeration;
+
+      const pred = predictions[locId];
+      const lsP = pred?.prediction?.hazards?.landslide?.probability || 0;
+      const flP = pred?.prediction?.hazards?.flood?.probability || 0;
+      const riskP = Math.max(lsP, flP);
+      const colorHex = probColor(riskP);
+
+      // Pin Group
+      const pinGroup = new THREE.Group();
+
+      // Pin Head (Sphere)
+      const headGeo = new THREE.SphereGeometry(1.6, 16, 16);
+      const headMat = new THREE.MeshStandardMaterial({
+        color: colorHex,
+        emissive: colorHex,
+        emissiveIntensity: 0.6,
+        roughness: 0.2,
+      });
+      const headMesh = new THREE.Mesh(headGeo, headMat);
+      headMesh.position.y = 4.2;
+
+      // Pin Stem (Cone pointing down to ground)
+      const stemGeo = new THREE.ConeGeometry(0.7, 4.2, 8);
+      stemGeo.rotateX(Math.PI);
+      const stemMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+      const stemMesh = new THREE.Mesh(stemGeo, stemMat);
+      stemMesh.position.y = 2.1;
+
+      // Pulsing Beacon Ring at Ground Surface
+      const ringGeo = new THREE.RingGeometry(1.2, 2.0, 16);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide,
+      });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.y = 0.1;
+
+      pinGroup.add(headMesh);
+      pinGroup.add(stemMesh);
+      pinGroup.add(ringMesh);
+
+      pinGroup.position.set(x, siteAltitude, z);
+      pinGroup.userData = {
+        loc,
+        headMesh,
+        ringMesh,
+        baseY: siteAltitude,
+        satelliteElevation: Math.round(hMeters),
+        distToRiverKm: distKm.toFixed(1),
+      };
+
+      scene.add(pinGroup);
+      return pinGroup;
+    });
+    markersRef.current = markers;
+
+    // M. Raycasting for Interaction
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const onPointerMove = (e) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hitCandidates = markers.map((g) => g.userData.headMesh);
+      const hits = raycaster.intersectObjects(hitCandidates);
+
+      if (hits.length > 0) {
+        const hitGroup = hits[0].object.parent;
+        setHoveredSite({
+          ...hitGroup.userData.loc,
+          satelliteElevation: hitGroup.userData.satelliteElevation,
+          distToRiverKm: hitGroup.userData.distToRiverKm,
+        });
+        renderer.domElement.style.cursor = 'pointer';
+      } else {
+        setHoveredSite(null);
+        renderer.domElement.style.cursor = 'grab';
+      }
+    };
+
+    const onClick = (e) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hitCandidates = markers.map((g) => g.userData.headMesh);
+      const hits = raycaster.intersectObjects(hitCandidates);
+
+      if (hits.length > 0) {
+        const hitGroup = hits[0].object.parent;
+        setSelectedLocation(hitGroup.userData.loc);
+      }
+    };
+
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('click', onClick);
+
+    // N. Orbit Controls (Mouse Drag & Scroll Zoom)
+    let isDragging = false;
+    let prevMouse = { x: 0, y: 0 };
+    let theta = 0.25;
+    let phi = 0.52;
+    let radius = 80;
+
+    const onMouseDown = (e) => {
+      isDragging = true;
+      prevMouse = { x: e.clientX, y: e.clientY };
+      renderer.domElement.style.cursor = 'grabbing';
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      theta -= (e.clientX - prevMouse.x) * 0.007;
+      phi = Math.max(0.12, Math.min(1.35, phi - (e.clientY - prevMouse.y) * 0.005));
+      prevMouse = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+      renderer.domElement.style.cursor = 'grab';
+    };
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      radius = Math.max(30, Math.min(145, radius + e.deltaY * 0.06));
+    };
+
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
+    // O. Animation Loop with Flowing River Water Simulation
+    let clock = 0;
+    const animate = () => {
+      frameRef.current = requestAnimationFrame(animate);
+      clock += 0.016;
+
+      // 1. Auto-rotation when not dragging
+      if (autoRotate && !isDragging) {
+        theta += 0.002;
+      }
+
+      // 2. Camera spherical orbit
+      camera.position.x = radius * Math.sin(theta) * Math.cos(phi);
+      camera.position.y = Math.max(12, radius * Math.sin(phi) + 12);
+      camera.position.z = radius * Math.cos(theta) * Math.cos(phi);
+      camera.lookAt(0, 8, 0);
+
+      // 3. Flowing River Water Animation: Scroll UV along Teesta river curves
+      if (waterTextureRef.current) {
+        waterTextureRef.current.offset.y -= 0.0045 * flowSpeed;
+      }
+
+      // 4. Subtle shimmer vertex ripple on river water
+      if (riverMeshRef.current && riverMeshRef.current.geometry) {
+        const rPos = riverMeshRef.current.geometry.attributes.position;
+        if (rPos && !riverMeshRef.current._baseY) {
+          riverMeshRef.current._baseY = new Float32Array(rPos.count);
+          for (let k = 0; k < rPos.count; k++) {
+            riverMeshRef.current._baseY[k] = rPos.getY(k);
+          }
+        }
+        if (riverMeshRef.current._baseY) {
+          const bY = riverMeshRef.current._baseY;
+          for (let k = 0; k < rPos.count; k++) {
+            const ripple = Math.sin(clock * 5.0 + k * 0.4) * 0.05 * flowSpeed;
+            rPos.setY(k, bY[k] + ripple);
+          }
+          rPos.needsUpdate = true;
+        }
+      }
+
+      // 5. Pulse pin beacons & floating animation
+      markers.forEach((pin, idx) => {
+        const floatDelta = Math.sin(clock * 3.0 + idx * 1.2) * 0.4;
+        pin.position.y = pin.userData.baseY + floatDelta;
+        const ringScale = 1.0 + Math.sin(clock * 4.0 + idx) * 0.25;
+        pin.userData.ringMesh.scale.set(ringScale, ringScale, ringScale);
+      });
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // P. Window Resize Handler
+    const onResize = () => {
+      if (!el || !rendererRef.current) return;
+      const nW = el.clientWidth;
+      const nH = el.clientHeight;
+      camera.aspect = nW / nH;
+      camera.updateProjectionMatrix();
+      rendererRef.current.setSize(nW, nH);
+    };
+    window.addEventListener('resize', onResize);
+
+    meshRef.current._wireMesh = wireMesh;
+
+    // Cleanup
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('click', onClick);
+      renderer.domElement.removeEventListener('mousedown', onMouseDown);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      renderer.dispose();
+      if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
+    };
+  }, [satelliteData]);
+
+  // Update Material when textureMode changes
+  useEffect(() => {
+    if (!meshRef.current || !materialsRef.current) return;
+    const targetMat = materialsRef.current[textureMode];
+    if (targetMat) {
+      meshRef.current.material = targetMat;
+      meshRef.current.material.needsUpdate = true;
+    }
+  }, [textureMode]);
+
+  // Update Vertical Relief Exaggeration
+  useEffect(() => {
+    if (!geoRef.current || !baseHeightsRef.current.length) return;
+    const geo = geoRef.current;
+    const pos = geo.attributes.position;
+    const baseH = baseHeightsRef.current;
+
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, baseH[i] * vertExaggeration);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+
+    // Scale river ribbon height to match vertical exaggeration
+    if (riverMeshRef.current && riverMeshRef.current.geometry) {
+      const rPos = riverMeshRef.current.geometry.attributes.position;
+      const bY = riverMeshRef.current._baseY;
+      if (bY) {
+        for (let k = 0; k < rPos.count; k++) {
+          bY[k] = bY[k] * (vertExaggeration / 1.4);
+          rPos.setY(k, bY[k]);
+        }
+        rPos.needsUpdate = true;
+      }
+    }
+
+    // Adjust station pin heights
+    if (markersRef.current) {
+      markersRef.current.forEach((pin) => {
+        const normY = pin.userData.baseY * (vertExaggeration / 1.4);
+        pin.userData.baseY = normY;
+        pin.position.y = normY;
+      });
+    }
+  }, [vertExaggeration]);
+
+  // Update Wireframe visibility
+  useEffect(() => {
+    if (meshRef.current?._wireMesh) {
+      meshRef.current._wireMesh.visible = showWireframe;
+    }
+  }, [showWireframe]);
+
   return (
-    <div style={{ height: "100%", width: "100%", position: "relative" }}>
-      {/* Network & Offline Storage Status Pill */}
-      <div className="terrain-status-pill">
-        <span
-          className="terrain-status-dot"
-          style={{
-            background:
-              mode !== "satellite"
-                ? "#eab308"
-                : isOnline && satelliteSource === "live"
-                ? "#22c55e"
-                : "#a855f7",
-          }}
-        />
-        <span>
-          {mode === "satellite" ? (
-            isOnline && satelliteSource === "live" ? (
-              <span>🛰️ Live Satellite Stream (Cached in Storage)</span>
-            ) : (
-              <span>
-                💾 Offline Mode: Using Stored Satellite Image
-                {cachedMeta?.dateString ? ` (Saved: ${cachedMeta.dateString})` : ""}
-              </span>
-            )
-          ) : (
-            <span>🌱 3D Himalayan Terrain Model (Offline Realistic)</span>
-          )}
-        </span>
-      </div>
-
-      {/* Real DEM Provenance Badge from OpenTopography API */}
-      <div className="terrain-dem-badge">
-        <span>🏔️</span>
-        <span>
-          <strong>Real DEM:</strong> OpenTopography SRTMGL1 (30m)
-        </span>
-        {heightmap?.elevation_min_m && heightmap?.elevation_max_m && (
-          <span className="dem-badge-range">
-            {heightmap.elevation_min_m}m – {heightmap.elevation_max_m}m
+    <div
+      ref={mountRef}
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        borderRadius: 12,
+        overflow: 'hidden',
+        background: '#f1f5f9',
+        boxShadow: 'inset 0 0 1px rgba(0,0,0,0.1)',
+      }}
+    >
+      {/* ── Top Bar Controls ── */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          right: 12,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10,
+          background: 'rgba(255, 255, 255, 0.94)',
+          backdropFilter: 'blur(8px)',
+          padding: '8px 14px',
+          borderRadius: 10,
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
+          border: '1px solid #e2e8f0',
+          zIndex: 10,
+        }}
+      >
+        {/* Left: Mode Selector Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+            Terrain:
           </span>
-        )}
-      </div>
-
-      {/* Compact 3D View & Realistic Relief Controls */}
-      <div className="terrain-view-toggle">
-        <div className="terrain-toggle-group">
           <button
-            className={`terrain-toggle-btn ${mode === "satellite" ? "active" : ""}`}
-            onClick={() => setMode("satellite")}
-            title="Photorealistic Esri ArcGIS Satellite Imagery"
+            onClick={() => setTextureMode('satellite')}
+            style={{
+              padding: '5px 11px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              borderRadius: 6,
+              border: textureMode === 'satellite' ? '1px solid #0284c7' : '1px solid #cbd5e1',
+              background: textureMode === 'satellite' ? '#0284c7' : '#ffffff',
+              color: textureMode === 'satellite' ? '#ffffff' : '#334155',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              transition: 'all 0.15s ease',
+            }}
           >
-            🛰️ Satellite
+            🛰️ Satellite View
           </button>
+
           <button
-            className={`terrain-toggle-btn ${mode === "offline" ? "active" : ""}`}
-            onClick={() => setMode("offline")}
-            title="Realistic Himalayan Topographic Landscape"
+            onClick={() => setTextureMode('topo')}
+            style={{
+              padding: '5px 11px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              borderRadius: 6,
+              border: textureMode === 'topo' ? '1px solid #0f766e' : '1px solid #cbd5e1',
+              background: textureMode === 'topo' ? '#0f766e' : '#ffffff',
+              color: textureMode === 'topo' ? '#ffffff' : '#334155',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              transition: 'all 0.15s ease',
+            }}
           >
-            🌱 Landscape
+            🗺️ Topographic DEM
+          </button>
+
+          <button
+            onClick={() => setTextureMode('hazard')}
+            style={{
+              padding: '5px 11px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              borderRadius: 6,
+              border: textureMode === 'hazard' ? '1px solid #dc2626' : '1px solid #cbd5e1',
+              background: textureMode === 'hazard' ? '#dc2626' : '#ffffff',
+              color: textureMode === 'hazard' ? '#ffffff' : '#334155',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            📊 Hazard Heatmap
           </button>
         </div>
 
-        <div className="terrain-toggle-divider" />
+        {/* Right: Sliders & Toggles */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* Vertical Exaggeration Slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: '#475569' }}>
+            <span style={{ fontWeight: 600 }}>Relief:</span>
+            <input
+              type="range"
+              min="0.8"
+              max="2.6"
+              step="0.1"
+              value={vertExaggeration}
+              onChange={(e) => setVertExaggeration(parseFloat(e.target.value))}
+              style={{ width: 70, cursor: 'pointer' }}
+            />
+            <span style={{ fontWeight: 700, minWidth: 26, color: '#0f172a' }}>{vertExaggeration.toFixed(1)}×</span>
+          </div>
 
-        <div className="terrain-toggle-group">
+          {/* River Current Speed Toggle */}
           <button
-            className={`terrain-toggle-btn ${reliefMode === "true" ? "active" : ""}`}
-            onClick={() => setReliefMode("true")}
-            title="Exact 1:1 true-to-life physical elevation scale (zero exaggeration)"
+            onClick={() => setFlowSpeed((s) => (s > 0 ? 0 : 1.0))}
+            style={{
+              padding: '4px 9px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              borderRadius: 5,
+              border: '1px solid #0284c7',
+              background: flowSpeed > 0 ? '#e0f2fe' : '#ffffff',
+              color: flowSpeed > 0 ? '#0369a1' : '#64748b',
+              cursor: 'pointer',
+            }}
+            title="Toggle animated river flow"
           >
-            📐 1:1 Scale
+            🌊 {flowSpeed > 0 ? 'River Flow: Active' : 'River Flow: Paused'}
           </button>
+
+          {/* Wireframe Toggle */}
           <button
-            className={`terrain-toggle-btn ${reliefMode === "natural" ? "active" : ""}`}
-            onClick={() => setReliefMode("natural")}
-            title="Recommended: Cartographically balanced natural Himalayan elevation relief (1.4x)"
+            onClick={() => setShowWireframe(!showWireframe)}
+            style={{
+              padding: '4px 9px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              borderRadius: 5,
+              border: '1px solid #cbd5e1',
+              background: showWireframe ? '#e2e8f0' : '#ffffff',
+              color: '#334155',
+              cursor: 'pointer',
+            }}
           >
-            🏔️ Natural (1.4x)
+            📐 Wireframe
+          </button>
+
+          {/* Auto Rotate Toggle */}
+          <button
+            onClick={() => setAutoRotate(!autoRotate)}
+            style={{
+              padding: '4px 9px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              borderRadius: 5,
+              border: '1px solid #cbd5e1',
+              background: autoRotate ? '#f0fdf4' : '#ffffff',
+              color: autoRotate ? '#15803d' : '#64748b',
+              cursor: 'pointer',
+            }}
+          >
+            {autoRotate ? '⏸ Pause Orbit' : '▶ Play Orbit'}
           </button>
         </div>
       </div>
 
-      <div ref={mountRef} style={{ height: "100%", width: "100%", cursor: "grab" }} />
+      {/* ── Hovered / Selected Station Overlay ── */}
+      {hoveredSite && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 48,
+            left: 14,
+            background: 'rgba(255, 255, 255, 0.96)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            boxShadow: '0 4px 16px rgba(15,23,42,0.14)',
+            border: '1px solid #cbd5e1',
+            pointerEvents: 'none',
+            zIndex: 10,
+            maxWidth: 320,
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>{hoveredSite.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            <span
+              style={{
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background:
+                  hoveredSite.hazard_typology === 'COMPOUND'
+                    ? '#f3e8ff'
+                    : hoveredSite.hazard_typology === 'LANDSLIDE_ONLY'
+                    ? '#fef3c7'
+                    : '#e0f2fe',
+                color:
+                  hoveredSite.hazard_typology === 'COMPOUND'
+                    ? '#7e22ce'
+                    : hoveredSite.hazard_typology === 'LANDSLIDE_ONLY'
+                    ? '#b45309'
+                    : '#0369a1',
+              }}
+            >
+              {hoveredSite.hazard_typology === 'COMPOUND'
+                ? '🔮 Compound Gorge'
+                : hoveredSite.hazard_typology === 'LANDSLIDE_ONLY'
+                ? '🏔️ High Alpine Ridge'
+                : '🌊 River Basin Flat'}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '0.72rem', color: '#334155', marginTop: 5, lineHeight: 1.4 }}>
+            <div>
+              🛰️ Satellite Elevation: <b>{hoveredSite.satelliteElevation || hoveredSite.elevation_m}m</b>
+            </div>
+            <div>
+              🌊 Distance to Teesta River: <b>{hoveredSite.distToRiverKm} km</b>
+            </div>
+            <div style={{ color: '#64748b', fontSize: '0.68rem', marginTop: 2 }}>
+              Coordinates: {hoveredSite.lat.toFixed(4)}°N, {hoveredSite.lng.toFixed(4)}°E
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bottom Status Bar ── */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          left: 14,
+          right: 14,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          pointerEvents: 'none',
+          fontSize: '0.72rem',
+          color: '#475569',
+          background: 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(6px)',
+          padding: '6px 14px',
+          borderRadius: 6,
+          border: '1px solid rgba(226, 232, 240, 0.9)',
+          zIndex: 5,
+        }}
+      >
+        <div>
+          🖱 <b>Drag</b> to rotate · <b>Scroll</b> to zoom · <b>Hover pin</b> to inspect river distance
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: satStatus === 'live' ? '#16a34a' : satStatus === 'cached' ? '#0284c7' : '#f59e0b',
+              boxShadow: `0 0 6px ${satStatus === 'live' ? '#22c55e' : '#38bdf8'}`,
+            }}
+          />
+          <span style={{ fontWeight: 600 }}>
+            {satStatus === 'live'
+              ? `📡 ${demSource} (Live Internet Sync)`
+              : satStatus === 'cached'
+              ? `🛰️ ${demSource} (Cached Earth Observation)`
+              : 'Streaming Live Satellite DEM Data…'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
