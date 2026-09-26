@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import SimulationMapView, { EXTENDED_TEESTA_SYSTEM } from "./SimulationMapView";
 import { SIKKIM_SETTLEMENTS, ROAD_CORRIDORS } from "../data/mockPopulation";
 import {
@@ -269,8 +269,7 @@ export default function SimulationWorkspace() {
   const [regionFilter, setRegionFilter] = useState("all"); // "all" | "landslide_only" | "flood_only" | "compound"
   const [selectedSite, setSelectedSite] = useState("LOC01");
   const [expandedRegions, setExpandedRegions] = useState({});
-  const [simAlertToast, setSimAlertToast] = useState(null);
-  const triggeredAlertsRef = useRef(new Set());
+  const [dismissedAlertDay, setDismissedAlertDay] = useState(null);
 
   // Custom User Dropped Points on Map
   const [customSites, setCustomSites] = useState([]);
@@ -421,8 +420,7 @@ export default function SimulationWorkspace() {
   }
 
   function handleReplay() {
-    triggeredAlertsRef.current.clear();
-    setSimAlertToast(null);
+    setDismissedAlertDay(null);
     setDayOfYear(1);
     setIsPlaying(true);
   }
@@ -504,119 +502,72 @@ export default function SimulationWorkspace() {
     }
   }
 
-  // Automated Alert Trigger Toast
-  useEffect(() => {
-    displayedList.forEach((locId) => {
-      const r = activeSimSites[locId];
-      if (!r) return;
+  // Real-Time Active Critical Hazard Directives (Updates dynamically with simulation day)
+  const activeCrisisAlerts = useMemo(() => {
+    return displayedList
+      .map((locId) => {
+        const r = activeSimSites[locId];
+        if (!r) return null;
 
-      const isLsSevere =
-        r.hazard_typology !== "FLOOD_ONLY" &&
-        (r.severity_band === "CATASTROPHIC_POTENTIAL" ||
-          r.stability_state === "UNSTABLE" ||
-          (r.factor_of_safety != null && r.factor_of_safety < 1.0));
+        const isLsSevere =
+          r.hazard_typology !== "FLOOD_ONLY" &&
+          (r.severity_band === "CATASTROPHIC_POTENTIAL" ||
+            r.stability_state === "UNSTABLE" ||
+            (r.factor_of_safety != null && r.factor_of_safety < 1.0));
 
-      const isFlSevere =
-        r.hazard_typology !== "LANDSLIDE_ONLY" &&
-        (r.river_stage_state === "CATASTROPHIC_SURGE" ||
-          r.river_stage_state === "OVERBANK_FLOODING" ||
-          (r.flood_probability_percent != null && r.flood_probability_percent > 70));
+        const isFlSevere =
+          r.hazard_typology !== "LANDSLIDE_ONLY" &&
+          (r.river_stage_state === "CATASTROPHIC_SURGE" ||
+            r.river_stage_state === "OVERBANK_FLOODING" ||
+            (r.flood_probability_percent != null && r.flood_probability_percent > 70));
 
-      if (isLsSevere || isFlSevere) {
-        const alertKey = `${locId}-${dayOfYear}`;
-        if (!triggeredAlertsRef.current.has(alertKey)) {
-          triggeredAlertsRef.current.add(alertKey);
+        if (!isLsSevere && !isFlSevere) return null;
 
-          const roadName = getRoadName(locId, r);
-          const prob = Math.round(r.probability_percent || 75);
-          const floodQ = r.peak_discharge_m3s || 45;
-          const floodDepth = r.inundation_depth_m || 1.0;
+        const roadName = getRoadName(locId, r);
+        const prob = Math.round(r.probability_percent || 75);
+        const floodQ = Math.round(r.peak_discharge_m3s || 45);
+        const floodDepth = (r.inundation_depth_m || 1.0).toFixed(1);
 
-          let title = `⚠️ ${r.name} - Elevated Alert`;
-          let alertMessage = "";
-          let actionDirective = "";
+        let title = `⚠️ ${r.name} - Elevated Alert`;
+        let alertMessage = "";
+        let actionDirective = "";
 
-          if (isLsSevere && isFlSevere) {
-            title = `🚨 COMPOUND CRISIS: ${r.name}`;
-            alertMessage = `CRITICAL DUAL HAZARD: Severe slope failure risk (${prob}%) coinciding with catastrophic river surge (Q = ${floodQ} m³/s, +${floodDepth}m stage rise). Extreme toe scour and highway severance imminent!`;
-            actionDirective = `ORDER IMMEDIATE DUAL EVACUATION of valley settlements and hillside homes. Close ${roadName} to all traffic immediately.`;
-          } else if (isFlSevere) {
-            title = `🌊 FLASH FLOOD WARNING: ${r.name}`;
-            alertMessage = `TEESTA OVERBANK FLOODING: Hydraulic discharge ${floodQ} m³/s with +${floodDepth}m overbank surge along ${roadName}.`;
-            actionDirective = `EVACUATE LOW-LYING BASIN SETTLEMENTS to designated high-ground flood shelters. Halt all riverbank activities.`;
-          } else {
-            title = `🏔️ LANDSLIDE EMERGENCY: ${r.name}`;
-            alertMessage = `SLOPE COLLAPSE IMMINENT: Regolith saturated, Factor of Safety dropped to ${r.factor_of_safety}. Severe planar slip & rockfall predicted across ${roadName}.`;
-            actionDirective = `DISPATCH EVACUATION SIRENS to slope dwellers. Halt highway traffic and clear corridor perimeter.`;
-          }
-
-          setSimAlertToast({
-            locId: locId,
-            name: r.name,
-            roadName: roadName,
-            roadBlocked: r.roadBlocked,
-            day: dayOfYear,
-            dateString: dateInfo.dateString,
-            probability: prob,
-            title: title,
-            alertMessage: alertMessage,
-            actionDirective: actionDirective,
-            severity: isLsSevere && isFlSevere ? "COMPOUND_CRITICAL" : isFlSevere ? "FLOOD_SURGE" : "CATASTROPHIC_POTENTIAL",
-          });
+        if (isLsSevere && isFlSevere) {
+          title = `🚨 COMPOUND CRISIS: ${r.name}`;
+          alertMessage = `CRITICAL DUAL HAZARD: Severe slope failure risk (${prob}%) coinciding with catastrophic river surge (Q = ${floodQ} m³/s, +${floodDepth}m stage rise). Extreme toe scour and highway severance imminent!`;
+          actionDirective = `ORDER IMMEDIATE DUAL EVACUATION of valley settlements and hillside homes. Close ${roadName} to all traffic immediately.`;
+        } else if (isFlSevere) {
+          title = `🌊 FLASH FLOOD WARNING: ${r.name}`;
+          alertMessage = `TEESTA OVERBANK FLOODING: Hydraulic discharge ${floodQ} m³/s with +${floodDepth}m overbank surge along ${roadName}.`;
+          actionDirective = `EVACUATE LOW-LYING BASIN SETTLEMENTS to designated high-ground flood shelters. Halt all riverbank activities.`;
+        } else {
+          title = `🏔️ LANDSLIDE EMERGENCY: ${r.name}`;
+          alertMessage = `SLOPE COLLAPSE IMMINENT: Regolith saturated, Factor of Safety dropped to ${r.factor_of_safety}. Severe planar slip & rockfall predicted across ${roadName}.`;
+          actionDirective = `DISPATCH EVACUATION SIRENS to slope dwellers. Halt highway traffic and clear corridor perimeter.`;
         }
-      }
-    });
-  }, [dayOfYear, regionFilter, dateInfo.dateString]);
 
-  useEffect(() => {
-    if (!simAlertToast) return;
-    const timer = setTimeout(() => {
-      setSimAlertToast(null);
-    }, 9000);
-    return () => clearTimeout(timer);
-  }, [simAlertToast]);
+        return {
+          locId,
+          name: r.name,
+          roadName,
+          roadBlocked: r.roadBlocked,
+          day: dayOfYear,
+          dateString: dateInfo.dateString,
+          probability: prob,
+          title,
+          alertMessage,
+          actionDirective,
+          isLsSevere,
+          isFlSevere,
+          isCompound: isLsSevere && isFlSevere,
+          severity: isLsSevere && isFlSevere ? "COMPOUND_CRITICAL" : isFlSevere ? "FLOOD_SURGE" : "CATASTROPHIC_POTENTIAL",
+        };
+      })
+      .filter(Boolean);
+  }, [displayedList, activeSimSites, dayOfYear, dateInfo.dateString]);
 
   return (
     <div className="sim-workspace-layout">
-      {/* ═══ REAL-TIME DISASTER EVENT TOAST NOTIFICATION ═══ */}
-      {simAlertToast && (
-        <div className="sim-emergency-popup-toast">
-          <div className="sim-toast-header">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="pulse-danger-dot" />
-              <strong style={{ color: "#991b1b", fontSize: 13.5 }}>
-                {simAlertToast.title}
-              </strong>
-            </div>
-            <button
-              className="sim-toast-close"
-              onClick={() => setSimAlertToast(null)}
-              title="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="sim-toast-body">
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
-              📍 {simAlertToast.name} · {simAlertToast.roadName}
-            </div>
-            <div style={{ fontSize: 12.5, color: "#991b1b", lineHeight: 1.45, marginBottom: 8, fontWeight: 700, background: "#fee2e2", padding: "8px 10px", borderRadius: 6, border: "1px solid #fca5a5" }}>
-              📢 {simAlertToast.alertMessage}
-              {simAlertToast.roadBlocked ? " Connecting highway corridor is SEVERED by debris." : ""}
-            </div>
-            <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.4, marginBottom: 8, background: "#f8fafc", padding: "8px 10px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
-              👉 <strong>Directive:</strong> {simAlertToast.actionDirective}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, fontSize: 11.5, color: "#64748b" }}>
-              <span>📅 {simAlertToast.dateString} · Day {simAlertToast.day}/{TOTAL_SIMULATION_DAYS}</span>
-              <span style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-                📱 Auto-Dispatched via SMS Broadcast
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Simulation Map View (Left / Center) */}
       <div className="sim-map-container">
         {/* ═══ UNIFIED SIMULATION MISSION CONTROL DECK (TOP CARD ABOVE MAP) ═══ */}
@@ -819,6 +770,80 @@ export default function SimulationWorkspace() {
             </button>
           </div>
         </div>
+
+        {/* ═══ REAL-TIME DISASTER ALERT DIRECTIVE (TOP OF RIGHT PANEL) ═══ */}
+        {activeCrisisAlerts.length > 0 && dismissedAlertDay !== dayOfYear && (
+          <div className="sim-panel-alert-banner">
+            <div className="sim-panel-alert-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span className="pulse-danger-dot" />
+                <strong className="sim-panel-alert-title">
+                  {activeCrisisAlerts.length > 1
+                    ? `🚨 MULTI-REGION CRISIS (${activeCrisisAlerts.length} ZONES ACTIVE)`
+                    : activeCrisisAlerts[0].title}
+                </strong>
+              </div>
+              <button
+                className="sim-panel-alert-close"
+                onClick={() => setDismissedAlertDay(dayOfYear)}
+                title="Dismiss alert for this day"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="sim-panel-alert-body">
+              {activeCrisisAlerts.length > 1 ? (
+                <>
+                  <div className="sim-panel-alert-chips">
+                    {activeCrisisAlerts.map((a) => (
+                      <span
+                        key={a.locId}
+                        className="sim-panel-alert-chip"
+                        onClick={() => {
+                          setSelectedSite(a.locId);
+                          setExpandedRegions((prev) => ({ ...prev, [a.locId]: true }));
+                        }}
+                        title={`Focus ${a.name}`}
+                      >
+                        📍 {a.name.split(" ")[0]} ({a.isCompound ? "Dual" : a.isFlSevere ? "Flood" : "Slide"})
+                      </span>
+                    ))}
+                  </div>
+                  <div className="sim-panel-alert-msg">
+                    📢 <strong>REGIONAL SYNOPTIC DELUGE:</strong> Simultaneous critical hazards detected across {activeCrisisAlerts.length} sectors along the Teesta corridor. Highway washouts and severe inundation reported.
+                  </div>
+                  <div className="sim-panel-alert-directive">
+                    👉 <strong>Directive:</strong> COORDINATED INTER-AGENCY EVACUATION ACTIVE. Divert NH-10 traffic and activate emergency shelters across all affected zones.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="sim-panel-alert-location">
+                    📍 <strong>{activeCrisisAlerts[0].name}</strong> · {activeCrisisAlerts[0].roadName}
+                    {activeCrisisAlerts[0].roadBlocked && (
+                      <span className="sim-panel-alert-blocked-badge">⛔ ROAD CUT</span>
+                    )}
+                  </div>
+                  <div className="sim-panel-alert-msg">
+                    📢 {activeCrisisAlerts[0].alertMessage}
+                    {activeCrisisAlerts[0].roadBlocked ? " Highway corridor is SEVERED by debris." : ""}
+                  </div>
+                  <div className="sim-panel-alert-directive">
+                    👉 <strong>Directive:</strong> {activeCrisisAlerts[0].actionDirective}
+                  </div>
+                </>
+              )}
+
+              <div className="sim-panel-alert-footer">
+                <span>📅 {dateInfo.dateString} · Day {dayOfYear}/{TOTAL_SIMULATION_DAYS}</span>
+                <span className="sim-panel-alert-broadcast-tag">
+                  📱 Auto-Dispatched via SMS Broadcast
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable list of Region Cards */}
         <div className="sim-regions-list">

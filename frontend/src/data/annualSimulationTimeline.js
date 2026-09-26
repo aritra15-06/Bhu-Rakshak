@@ -91,17 +91,64 @@ export function evaluateSlopeFromDEM(crestElevation, toeElevation, horizontalRun
   return round(slopeRad * (180 / Math.PI), 1);
 }
 
+// Hydrological Flash Flood Physics Simulation (SCS-CN + Muskingum valley routing)
+export function computeFloodTelemetry(rain1h, rain24h, catchmentAreaKm2, isRiverbank = true, typology = "COMPOUND") {
+  // LANDSLIDE-ONLY REGIONS: Perched on high alpine ridges/passes far above any river channels
+  if (typology === "LANDSLIDE_ONLY" || isRiverbank === false) {
+    return {
+      peak_discharge_m3s: 0.0,
+      flood_probability_percent: 0.0,
+      inundation_depth_m: 0.0,
+      river_stage_state: "NO_RIVER_ZONE",
+      is_riverbank_zone: false,
+      flood_notes: "Alpine Ridge / Mountain Crest — elevated far above river channels. Zero river flood risk.",
+    };
+  }
+
+  const c = isRiverbank ? 0.65 : 0.42;
+  const q_peak = Math.max(3.0, (c * (rain1h * 1.6 + rain24h * 0.15) * catchmentAreaKm2) / 3.6);
+  const bankfull_q = catchmentAreaKm2 * 3.8;
+  const flood_ratio = q_peak / bankfull_q;
+
+  let flood_prob = Math.min(99.0, Math.max(4.0, (flood_ratio - 0.25) * 115));
+  let river_stage = "NORMAL";
+  let inundation_depth_m = Math.max(0.2, q_peak / (catchmentAreaKm2 * 1.6));
+
+  if (flood_ratio > 1.6 || q_peak > 380) {
+    river_stage = "CATASTROPHIC_SURGE";
+    inundation_depth_m = Math.min(6.8, 2.5 + q_peak / 110);
+  } else if (flood_ratio > 1.0) {
+    river_stage = "OVERBANK_FLOODING";
+    inundation_depth_m = Math.min(3.8, 1.4 + q_peak / 170);
+  } else if (flood_ratio > 0.6) {
+    river_stage = "BANKFULL_WARNING";
+    inundation_depth_m = Math.min(1.9, 0.7 + q_peak / 240);
+  }
+
+  return {
+    peak_discharge_m3s: round(q_peak, 1),
+    flood_probability_percent: round(flood_prob, 1),
+    inundation_depth_m: round(inundation_depth_m, 2),
+    river_stage_state: river_stage,
+    is_riverbank_zone: true,
+    flood_notes: "Active Teesta Basin Riverbank / Floodplain Reach.",
+  };
+}
+
 /**
  * Generates daily simulation telemetry for all 6 regions across June-October (153 days).
- * Staggered failure sequence allows judges to observe each region experiencing severe hazard,
- * triggering emergency broadcasts, blocking highways, and recovering in turn:
+ * Contains a balanced mixture of:
+ * - 🔮 COMPOUND SITES (Both Landslide & Flash Flood): LOC01 (Chungthang Hub), LOC02 (Dikchu Gorge)
+ * - 🏔️ LANDSLIDE-ONLY SITES (Ridges far from rivers): LOC03 (Nathu La Ridge), LOC04 (Dzongu Upper Ridge)
+ * - 🌊 FLOOD-ONLY SITES (Flat riverbank valley plains): LOC05 (Singtam Basin Flat), LOC06 (Rangpo Border Delta)
  *
- * 1. Days 18 - 24  (June 18-24):   LOC03 (Lachung Corridor - SH-1) [Pre-Monsoon Avalanche]
- * 2. Days 42 - 48  (July 12-18):   LOC01 (Dikchu Teesta Valley - NH-10) [Cloudburst Slope Collapse]
- * 3. Days 58 - 63  (July 28-Aug 2): LOC04 (Chungthang-Lachen Cut - SH-2) [Bedrock Planar Slide]
- * 4. Days 75 - 82  (Aug 14-21):    LOC02 (Chungthang Hydel Cut - SH-1/2) [Catastrophic Toe Scour]
- * 5. Days 98 - 104 (Sept 6-12):    LOC05 (Rangpo Teesta Slope - NH-10 S) [Riverbank Scour Slump]
- * 6. Days 116 - 122 (Sept 24-30):  LOC06 (Mangan Ridge Cut - NH-10 Pass) [Cumulative Saturation Slip]
+ * Sequence across monsoon:
+ * 1. Days 18 - 24  (June 18-24):   LOC03 (Nathu La Ridge - JN Road) [🏔️ LANDSLIDE ONLY - Alpine Rockfall]
+ * 2. Days 42 - 48  (July 12-18):   LOC01 (Chungthang Hub - SH-1/2) [🔮 COMPOUND - Slope Collapse + River Surge]
+ * 3. Days 58 - 63  (July 28-Aug 2): LOC04 (Dzongu Upper Ridge) [🏔️ LANDSLIDE ONLY - High Regolith Slide]
+ * 4. Days 75 - 82  (Aug 14-21):    LOC02 (Dikchu Teesta Gorge - NH-10) [🔮 COMPOUND - Toe Scour + Slump]
+ * 5. Days 98 - 104 (Sept 6-12):    LOC05 (Singtam River Basin - NH-10) [🌊 FLOOD ONLY - Overbank Inundation]
+ * 6. Days 116 - 122 (Sept 24-30):  LOC06 (Rangpo Border Delta - NH-10) [🌊 FLOOD ONLY - Catastrophic River Surge]
  * 7. Days 128 - 135 (Oct 6-13):    Custom Locations / Delayed Seepage Hazard
  * 8. Days 136 - 153 (Oct 14-31):   Stabilization & Recovery back to safe Green equilibrium across all corridors
  */
@@ -158,6 +205,16 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc01_state = loc01_fos >= 1.3 ? "STABLE" : "MARGINAL";
     loc01_status = loc01_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Post-Slide Debris Removal";
     loc01_blocked = false;
+  } else if (day >= 77 && day <= 80) {
+    // MULTI-REGION MONSOON DELUGE: Upstream basin downpour synchronized with Dikchu gorge breach & Dzongu
+    loc01_rain1h = 24.0;
+    loc01_rain24h = 145.0;
+    loc01_sat = 0.76;
+    loc01_fos = 1.16;
+    loc01_prob = 56.0;
+    loc01_sev = "MODERATE";
+    loc01_state = "MARGINAL";
+    loc01_status = "⛈️ Multi-Basin Deluge (Synchronized with Dikchu & Dzongu)";
   }
 
   // -------------------------------------------------------------------------
@@ -174,7 +231,17 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc02_status = "Stable Valley Junction";
   let loc02_blocked = false;
 
-  if (day >= 68 && day <= 74) {
+  if (day >= 43 && day <= 46) {
+    // MULTI-REGION STORM FRONT: Simultaneous convective downpour with Chungthang & Dzongu
+    loc02_rain1h = 18.5;
+    loc02_rain24h = 118.0;
+    loc02_sat = 0.74;
+    loc02_fos = 1.18;
+    loc02_prob = 52.0;
+    loc02_sev = "MODERATE";
+    loc02_state = "MARGINAL";
+    loc02_status = "🌧️ Multi-Region Storm (Synchronized with Chungthang & Dzongu)";
+  } else if (day >= 68 && day <= 74) {
     loc02_rain1h = 14.0;
     loc02_rain24h = 110.0;
     loc02_sat = 0.72;
@@ -206,10 +273,21 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc02_state = loc02_fos >= 1.3 ? "STABLE" : "MARGINAL";
     loc02_status = loc02_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Flood Scour Repair";
     loc02_blocked = false;
+  } else if (day >= 100 && day <= 103) {
+    // MULTI-REGION RAIN: Mid-valley runoff convergence while Singtam and Rangpo flood
+    loc02_rain1h = 13.0;
+    loc02_rain24h = 82.0;
+    loc02_sat = 0.65;
+    loc02_fos = 1.28;
+    loc02_prob = 38.0;
+    loc02_sev = "MODERATE";
+    loc02_state = "MARGINAL";
+    loc02_status = "🌧️ Mid-Valley Runoff Convergence (Active Rain)";
   }
 
   // -------------------------------------------------------------------------
-  // 3. LOC03: Lachung River Road Corridor (SH-1 Bhim Nala)
+  // 3. LOC03: Nathu La Alpine Ridge Cut (Jawaharlal Nehru Road)
+  // TYPOLOGY: LANDSLIDE_ONLY (High Alpine Ridge · Far Away From River)
   // PEAK HAZARD: June 18 - June 24 (Days 18 - 24)
   // -------------------------------------------------------------------------
   let loc03_rain1h = 1.8;
@@ -219,7 +297,7 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc03_prob = 8.0;
   let loc03_sev = "MINOR";
   let loc03_state = "STABLE";
-  let loc03_status = "Stable Alpine Corridor";
+  let loc03_status = "Stable High Alpine Ridge";
   let loc03_blocked = false;
 
   if (day >= 12 && day <= 17) {
@@ -230,18 +308,18 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc03_prob = 36.0;
     loc03_sev = "MODERATE";
     loc03_state = "MARGINAL";
-    loc03_status = "Snowmelt Runoff Infiltration";
+    loc03_status = "Pre-Monsoon Scree Saturation";
   } else if (day >= 18 && day <= 24) {
-    // PRE-MONSOON SQUALL & ROCK-DEBRIS AVALANCHE (RED)
+    // PRE-MONSOON SQUALL & ROCKFALL / PLANAR SLIDE (RED - LANDSLIDE ONLY)
     const peak = day === 20 || day === 21;
-    loc03_rain1h = peak ? 34.0 : 22.0;
-    loc03_rain24h = peak ? 195.0 : 135.0;
-    loc03_sat = peak ? 0.88 : 0.80;
-    loc03_fos = peak ? 0.86 : 0.94;
-    loc03_prob = peak ? 86.5 : 74.0;
+    loc03_rain1h = peak ? 36.0 : 24.0;
+    loc03_rain24h = peak ? 210.0 : 145.0;
+    loc03_sat = peak ? 0.90 : 0.82;
+    loc03_fos = peak ? 0.84 : 0.93;
+    loc03_prob = peak ? 88.5 : 76.0;
     loc03_sev = "MAJOR";
     loc03_state = "UNSTABLE";
-    loc03_status = "🚨 ROCK-DEBRIS AVALANCHE ACTIVE";
+    loc03_status = "🚨 ROCKFALL & PLANAR BEDROCK SLIDE (FAR FROM RIVER)";
     loc03_blocked = true;
   } else if (day >= 25 && day <= 28) {
     const prog = (day - 24) / 4;
@@ -257,7 +335,8 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   }
 
   // -------------------------------------------------------------------------
-  // 4. LOC04: Chungthang-Lachen Highway Cut (SH-2)
+  // 4. LOC04: Dzongu Upper Mountain Ridge (Tingvong-Lingthem Escarpment)
+  // TYPOLOGY: LANDSLIDE_ONLY (High Mountain Shoulder · 1,400m Above River)
   // PEAK HAZARD: July 28 - August 02 (Days 58 - 63)
   // -------------------------------------------------------------------------
   let loc04_rain1h = 2.0;
@@ -267,10 +346,20 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc04_prob = 12.0;
   let loc04_sev = "MINOR";
   let loc04_state = "STABLE";
-  let loc04_status = "Stable High Gorge Cut";
+  let loc04_status = "Stable Mountain Shoulder";
   let loc04_blocked = false;
 
-  if (day >= 53 && day <= 57) {
+  if (day >= 43 && day <= 46) {
+    // MULTI-REGION RAINFALL: Mountain escarpment rain during North Sikkim storm
+    loc04_rain1h = 15.0;
+    loc04_rain24h = 96.0;
+    loc04_sat = 0.70;
+    loc04_fos = 1.24;
+    loc04_prob = 44.0;
+    loc04_sev = "MODERATE";
+    loc04_state = "MARGINAL";
+    loc04_status = "🌧️ Regional High-Elevation Rain (Synchronized with Chungthang & Dikchu)";
+  } else if (day >= 53 && day <= 57) {
     loc04_rain1h = 11.0;
     loc04_rain24h = 82.0;
     loc04_sat = 0.65;
@@ -278,18 +367,18 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc04_prob = 39.0;
     loc04_sev = "MODERATE";
     loc04_state = "MARGINAL";
-    loc04_status = "High Joint Water Pressure";
+    loc04_status = "High Regolith Pore Pressure";
   } else if (day >= 58 && day <= 63) {
-    // LATE JULY PLANAR BEDROCK COLLAPSE (RED)
+    // LATE JULY ROTATIONAL REGOLITH COLLAPSE (RED - LANDSLIDE ONLY)
     const peak = day === 60 || day === 61;
-    loc04_rain1h = peak ? 38.0 : 25.0;
-    loc04_rain24h = peak ? 225.0 : 155.0;
-    loc04_sat = peak ? 0.90 : 0.82;
-    loc04_fos = peak ? 0.84 : 0.93;
-    loc04_prob = peak ? 88.0 : 76.0;
+    loc04_rain1h = peak ? 40.0 : 26.0;
+    loc04_rain24h = peak ? 240.0 : 165.0;
+    loc04_sat = peak ? 0.92 : 0.83;
+    loc04_fos = peak ? 0.82 : 0.91;
+    loc04_prob = peak ? 91.0 : 79.0;
     loc04_sev = "MAJOR";
     loc04_state = "UNSTABLE";
-    loc04_status = "🚨 PLANAR BEDROCK SLIDE OCCURRED";
+    loc04_status = "🚨 DEBRIS AVALANCHE & CUT SLOPE FAILURE (HIGH RIDGE)";
     loc04_blocked = true;
   } else if (day >= 64 && day <= 67) {
     const prog = (day - 63) / 4;
@@ -300,103 +389,119 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc04_prob = 68.0 * (1 - prog) + 11.0;
     loc04_sev = loc04_fos >= 1.3 ? "MINOR" : "MODERATE";
     loc04_state = loc04_fos >= 1.3 ? "STABLE" : "MARGINAL";
-    loc04_status = loc04_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Clearing Lachen Road";
+    loc04_status = loc04_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Clearing Mountain Road";
     loc04_blocked = false;
+  } else if (day >= 77 && day <= 80) {
+    // MULTI-REGION RAINFALL: High mountain shoulder rainfall during Teesta deluge
+    loc04_rain1h = 18.0;
+    loc04_rain24h = 115.0;
+    loc04_sat = 0.72;
+    loc04_fos = 1.20;
+    loc04_prob = 48.0;
+    loc04_sev = "MODERATE";
+    loc04_state = "MARGINAL";
+    loc04_status = "🌧️ Regional Mountain Storm (Synchronized with Dikchu & Chungthang)";
   }
 
   // -------------------------------------------------------------------------
-  // 5. LOC05: Rangpo Teesta River Slope (NH-10 South Corridor)
+  // 5. LOC05: Singtam Lower River Basin & Confluence Flat
+  // TYPOLOGY: FLOOD_ONLY (Flat Alluvial Floodplain · Zero Landslide Risk)
   // PEAK HAZARD: September 06 - September 12 (Days 98 - 104)
   // -------------------------------------------------------------------------
   let loc05_rain1h = 2.2;
   let loc05_rain24h = 18.0;
   let loc05_sat = 0.44;
-  let loc05_fos = 1.55;
-  let loc05_prob = 10.0;
+  let loc05_fos = 3.65; // Completely stable flat terrain
+  let loc05_prob = 2.0; // Minimal landslide risk
   let loc05_sev = "MINOR";
   let loc05_state = "STABLE";
-  let loc05_status = "Stable Riverbank";
+  let loc05_status = "Normal In-Bank River Flow";
   let loc05_blocked = false;
 
   if (day >= 93 && day <= 97) {
-    loc05_rain1h = 10.5;
-    loc05_rain24h = 75.0;
-    loc05_sat = 0.66;
-    loc05_fos = 1.24;
-    loc05_prob = 38.0;
+    loc05_rain1h = 12.0;
+    loc05_rain24h = 85.0;
+    loc05_sat = 0.68;
+    loc05_status = "Teesta River Stage Rising Toward Bankfull";
     loc05_sev = "MODERATE";
-    loc05_state = "MARGINAL";
-    loc05_status = "Riverbank Water Table Surcharge";
   } else if (day >= 98 && day <= 104) {
-    // SEPTEMBER RIVERBANK SCOUR SLUMP (RED)
+    // SEPTEMBER TEESTA OVERBANK FLASH FLOOD (RED - FLOOD ONLY, SLOPE STABLE)
     const peak = day === 100 || day === 101;
-    loc05_rain1h = peak ? 30.0 : 20.0;
-    loc05_rain24h = peak ? 185.0 : 130.0;
-    loc05_sat = peak ? 0.89 : 0.80;
-    loc05_fos = peak ? 0.87 : 0.95;
-    loc05_prob = peak ? 82.0 : 72.0;
+    loc05_rain1h = peak ? 38.0 : 25.0;
+    loc05_rain24h = peak ? 220.0 : 150.0;
+    loc05_sat = 0.88;
+    loc05_fos = 3.40; // Still completely stable slope (7 deg slope cannot slide)
+    loc05_prob = 3.0;
     loc05_sev = "MAJOR";
-    loc05_state = "UNSTABLE";
-    loc05_status = "🚨 EMBANKMENT SLUMP & ROAD WASHOUT";
-    loc05_blocked = true;
+    loc05_status = "🌊 TEESTA OVERBANK INUNDATION (RIVERBANK FLOOD ONLY)";
+    loc05_blocked = true; // Blocked by deep floodwaters
   } else if (day >= 105 && day <= 108) {
     const prog = (day - 104) / 4;
     loc05_rain1h = 4.0 * (1 - prog);
     loc05_rain24h = 22.0 * (1 - prog);
-    loc05_sat = 0.74 - prog * 0.35;
-    loc05_fos = 0.98 + prog * 0.54;
-    loc05_prob = 62.0 * (1 - prog) + 10.0;
-    loc05_sev = loc05_fos >= 1.3 ? "MINOR" : "MODERATE";
-    loc05_state = loc05_fos >= 1.3 ? "STABLE" : "MARGINAL";
-    loc05_status = loc05_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Embankment Restabilization";
+    loc05_sat = 0.70 - prog * 0.30;
+    loc05_fos = 3.65;
+    loc05_prob = 2.0;
+    loc05_sev = "MINOR";
+    loc05_status = "✅ River Waters Receding Back Within Banks";
     loc05_blocked = false;
+  } else if (day >= 118 && day <= 121) {
+    // MULTI-REGION RAINFALL: Twin lower Teesta storm front (Singtam + Rangpo)
+    loc05_rain1h = 22.0;
+    loc05_rain24h = 135.0;
+    loc05_sat = 0.74;
+    loc05_sev = "MODERATE";
+    loc05_status = "🌧️ Lower Basin Regional Storm (Synchronized with Rangpo)";
   }
 
   // -------------------------------------------------------------------------
-  // 6. LOC06: Mangan Ridge Highway Cut (NH-10 Pass)
+  // 6. LOC06: Rangpo Border River Delta Flat
+  // TYPOLOGY: FLOOD_ONLY (Wide Low Valley Delta · Zero Landslide Risk)
   // PEAK HAZARD: September 24 - September 30 (Days 116 - 122)
   // -------------------------------------------------------------------------
   let loc06_rain1h = 2.0;
   let loc06_rain24h = 15.0;
   let loc06_sat = 0.42;
-  let loc06_fos = 1.52;
-  let loc06_prob = 11.0;
+  let loc06_fos = 4.20; // Completely stable floodplain
+  let loc06_prob = 1.0; // Minimal landslide risk
   let loc06_sev = "MINOR";
   let loc06_state = "STABLE";
-  let loc06_status = "Stable Ridge Face";
+  let loc06_status = "Normal Basin Drainage";
   let loc06_blocked = false;
 
-  if (day >= 111 && day <= 115) {
-    loc06_rain1h = 11.5;
-    loc06_rain24h = 80.0;
-    loc06_sat = 0.67;
-    loc06_fos = 1.23;
-    loc06_prob = 40.0;
+  if (day >= 100 && day <= 103) {
+    // MULTI-REGION RAINFALL: Twin lower Teesta storm front (Rangpo + Singtam)
+    loc06_rain1h = 24.0;
+    loc06_rain24h = 150.0;
+    loc06_sat = 0.76;
+    loc06_status = "🌊 Lower Teesta Convective Front (Synchronized with Singtam)";
     loc06_sev = "MODERATE";
-    loc06_state = "MARGINAL";
-    loc06_status = "Cumulative Saturation Surcharge";
+  } else if (day >= 111 && day <= 115) {
+    loc06_rain1h = 14.0;
+    loc06_rain24h = 95.0;
+    loc06_sat = 0.70;
+    loc06_status = "Basin Runoff Convergence Approaching High Surcharge";
+    loc06_sev = "MODERATE";
   } else if (day >= 116 && day <= 122) {
-    // LATE SEPTEMBER ROTATIONAL EMBANKMENT FAILURE (RED)
+    // LATE SEPTEMBER CATASTROPHIC BASIN FLOOD SURGE (RED - FLOOD ONLY, SLOPE STABLE)
     const peak = day === 118 || day === 119;
-    loc06_rain1h = peak ? 35.0 : 23.0;
-    loc06_rain24h = peak ? 215.0 : 145.0;
-    loc06_sat = peak ? 0.91 : 0.81;
-    loc06_fos = peak ? 0.85 : 0.94;
-    loc06_prob = peak ? 87.0 : 75.0;
-    loc06_sev = "MAJOR";
-    loc06_state = "UNSTABLE";
-    loc06_status = "🚨 ROTATIONAL RIDGE CUT FAILURE";
-    loc06_blocked = true;
+    loc06_rain1h = peak ? 42.0 : 28.0;
+    loc06_rain24h = peak ? 260.0 : 180.0;
+    loc06_sat = 0.92;
+    loc06_fos = 4.10; // Flat terrain (6 deg) never slides
+    loc06_prob = 1.5;
+    loc06_sev = "CATASTROPHIC_POTENTIAL";
+    loc06_status = "🚨 CATASTROPHIC RIVER OVERBANK SURGE (RIVERBANK FLOOD ONLY)";
+    loc06_blocked = true; // Border highway bridge approach submerged
   } else if (day >= 123 && day <= 127) {
     const prog = (day - 122) / 5;
     loc06_rain1h = 4.0 * (1 - prog);
     loc06_rain24h = 20.0 * (1 - prog);
-    loc06_sat = 0.76 - prog * 0.38;
-    loc06_fos = 0.97 + prog * 0.52;
-    loc06_prob = 66.0 * (1 - prog) + 11.0;
-    loc06_sev = loc06_fos >= 1.3 ? "MINOR" : "MODERATE";
-    loc06_state = loc06_fos >= 1.3 ? "STABLE" : "MARGINAL";
-    loc06_status = loc06_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Retaining Wall Reinforcement";
+    loc06_sat = 0.72 - prog * 0.32;
+    loc06_fos = 4.20;
+    loc06_prob = 1.0;
+    loc06_sev = "MINOR";
+    loc06_status = "✅ Basin Discharge Cleared to Nominal Safe Stage";
     loc06_blocked = false;
   }
 
@@ -417,7 +522,6 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
       let c_blocked = false;
 
       if (day >= 128 && day <= 135) {
-        // Post-monsoon delayed seepage failure for custom site
         const peak = day === 131 || day === 132;
         c_rain1h = peak ? 28.0 : 16.0;
         c_rain24h = peak ? 175.0 : 115.0;
@@ -446,17 +550,26 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: c_sev,
         statusText: c_status,
         roadBlocked: c_blocked,
+        hazard_typology: cSite.hazard_typology || "COMPOUND",
       };
     });
   }
 
   // Topographic DEM Cross-Section Geometry
-  const loc01_slope = evaluateSlopeFromDEM(1915, 1780, 200);
-  const loc02_slope = evaluateSlopeFromDEM(1560, 1420, 161);
-  const loc03_slope = evaluateSlopeFromDEM(2772, 2650, 240);
-  const loc04_slope = evaluateSlopeFromDEM(2050, 1910, 145);
-  const loc05_slope = evaluateSlopeFromDEM(650, 580, 175);
-  const loc06_slope = evaluateSlopeFromDEM(1380, 1220, 165);
+  const loc01_slope = evaluateSlopeFromDEM(1915, 1780, 155); // 41.0° (Steep V-Gorge Cut directly over river)
+  const loc02_slope = evaluateSlopeFromDEM(1560, 1420, 179); // 38.0° (Canyon Cliff on NH-10)
+  const loc03_slope = evaluateSlopeFromDEM(3450, 3300, 155); // 44.0° (High Alpine Ridge Far From River)
+  const loc04_slope = evaluateSlopeFromDEM(2150, 2010, 155); // 42.0° (Dzongu Mountain Shoulder Far From River)
+  const loc05_slope = 7.0; // 7.0° (Flat Riverbank Plain / Valley Floor)
+  const loc06_slope = 6.0; // 6.0° (Flat Alluvial Floodplain Delta)
+
+  // Compute flood telemetry according to typology
+  const loc01_flood = computeFloodTelemetry(loc01_rain1h, loc01_rain24h, 180, true, "COMPOUND");
+  const loc02_flood = computeFloodTelemetry(loc02_rain1h, loc02_rain24h, 220, true, "COMPOUND");
+  const loc03_flood = computeFloodTelemetry(loc03_rain1h, loc03_rain24h, 0, false, "LANDSLIDE_ONLY");
+  const loc04_flood = computeFloodTelemetry(loc04_rain1h, loc04_rain24h, 0, false, "LANDSLIDE_ONLY");
+  const loc05_flood = computeFloodTelemetry(loc05_rain1h, loc05_rain24h, 320, true, "FLOOD_ONLY");
+  const loc06_flood = computeFloodTelemetry(loc06_rain1h, loc06_rain24h, 380, true, "FLOOD_ONLY");
 
   return {
     dayOfYear: day,
@@ -466,11 +579,14 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
       LOC01: {
         location_id: "LOC01",
         name: "Chungthang Confluence Hub",
-        elevation_m: 1780,
-        dem_crest_elevation_m: 1915,
-        dem_toe_elevation_m: 1780,
-        dem_horizontal_run_m: 200,
-        dem_delta_z_m: 135,
+        hazard_typology: "COMPOUND",
+        typology_label: "🔮 Compound (Slope + River)",
+        geomorphic_setting: "Narrow V-gorge at Lachen-Lachung confluence; steep rock slope plunging into riverbed.",
+        elevation_m: 1650,
+        dem_crest_elevation_m: 1800,
+        dem_toe_elevation_m: 1650,
+        dem_horizontal_run_m: 155,
+        dem_delta_z_m: 150,
         slope_deg: loc01_slope,
         rainfall_1h_mm: round(loc01_rain1h, 1),
         rainfall_24h_mm: round(loc01_rain24h, 1),
@@ -484,15 +600,22 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         roadBlocked: loc01_blocked,
         latitude: 27.6040,
         longitude: 88.6460,
+        ...loc01_flood,
+        compound_probability_percent: round(Math.min(99.0, (loc01_prob + loc01_flood.flood_probability_percent) * 0.65), 1),
+        compound_active: loc01_prob > 50 && loc01_flood.flood_probability_percent > 45,
+        compound_pathway: "LND_DAM_BURST_SURGE",
       },
       LOC02: {
         location_id: "LOC02",
-        name: "Mangan District Ridge Cut",
-        elevation_m: 1420,
-        dem_crest_elevation_m: 1560,
-        dem_toe_elevation_m: 1420,
-        dem_horizontal_run_m: 161,
-        dem_delta_z_m: 140,
+        name: "Dikchu Teesta River Gorge",
+        hazard_typology: "COMPOUND",
+        typology_label: "🔮 Compound (Slope + River)",
+        geomorphic_setting: "Teesta river gorge cut on NH-10; river actively undercuts road embankment toe.",
+        elevation_m: 750,
+        dem_crest_elevation_m: 910,
+        dem_toe_elevation_m: 750,
+        dem_horizontal_run_m: 179,
+        dem_delta_z_m: 160,
         slope_deg: loc02_slope,
         rainfall_1h_mm: round(loc02_rain1h, 1),
         rainfall_24h_mm: round(loc02_rain24h, 1),
@@ -504,17 +627,24 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: loc02_sev,
         statusText: loc02_status,
         roadBlocked: loc02_blocked,
-        latitude: 27.5050,
-        longitude: 88.5280,
+        latitude: 27.3990,
+        longitude: 88.5240,
+        ...loc02_flood,
+        compound_probability_percent: round(Math.min(99.0, (loc02_prob + loc02_flood.flood_probability_percent) * 0.65), 1),
+        compound_active: loc02_prob > 50 && loc02_flood.flood_probability_percent > 45,
+        compound_pathway: "TOE_SCOUR_DEEP_SLIP",
       },
       LOC03: {
         location_id: "LOC03",
-        name: "Lachung River Road Corridor (Bhim Nala)",
-        elevation_m: 2650,
-        dem_crest_elevation_m: 2772,
-        dem_toe_elevation_m: 2650,
-        dem_horizontal_run_m: 240,
-        dem_delta_z_m: 122,
+        name: "Nathu La Alpine Ridge Cut (JN Road)",
+        hazard_typology: "LANDSLIDE_ONLY",
+        typology_label: "🏔️ Landslide Only (High Ridge)",
+        geomorphic_setting: "Precipitous alpine pass on eastern mountain crest (>15km from Teesta river). Zero river presence.",
+        elevation_m: 3450,
+        dem_crest_elevation_m: 3610,
+        dem_toe_elevation_m: 3450,
+        dem_horizontal_run_m: 155,
+        dem_delta_z_m: 160,
         slope_deg: loc03_slope,
         rainfall_1h_mm: round(loc03_rain1h, 1),
         rainfall_24h_mm: round(loc03_rain24h, 1),
@@ -526,15 +656,22 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: loc03_sev,
         statusText: loc03_status,
         roadBlocked: loc03_blocked,
-        latitude: 27.6980,
-        longitude: 88.7460,
+        latitude: 27.3850,
+        longitude: 88.7550,
+        ...loc03_flood,
+        compound_probability_percent: 0.0,
+        compound_active: false,
+        compound_pathway: "NONE_RIDGE_ONLY",
       },
       LOC04: {
         location_id: "LOC04",
-        name: "Lachen Alpine Gorge Cut",
-        elevation_m: 2050,
-        dem_crest_elevation_m: 2200,
-        dem_toe_elevation_m: 2050,
+        name: "Dzongu Upper Mountain Ridge",
+        hazard_typology: "LANDSLIDE_ONLY",
+        typology_label: "🏔️ Landslide Only (High Ridge)",
+        geomorphic_setting: "Steep mountain shoulder elevated 1,400m vertically above the valley floor. Zero river presence.",
+        elevation_m: 2150,
+        dem_crest_elevation_m: 2300,
+        dem_toe_elevation_m: 2150,
         dem_horizontal_run_m: 155,
         dem_delta_z_m: 150,
         slope_deg: loc04_slope,
@@ -548,17 +685,24 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: loc04_sev,
         statusText: loc04_status,
         roadBlocked: loc04_blocked,
-        latitude: 27.7260,
-        longitude: 88.5520,
+        latitude: 27.5450,
+        longitude: 88.4550,
+        ...loc04_flood,
+        compound_probability_percent: 0.0,
+        compound_active: false,
+        compound_pathway: "NONE_RIDGE_ONLY",
       },
       LOC05: {
         location_id: "LOC05",
-        name: "Rangpo Teesta River Slope",
-        elevation_m: 650,
-        dem_crest_elevation_m: 720,
-        dem_toe_elevation_m: 650,
-        dem_horizontal_run_m: 175,
-        dem_delta_z_m: 70,
+        name: "Singtam Lower River Basin Flat",
+        hazard_typology: "FLOOD_ONLY",
+        typology_label: "🌊 Flash Flood Only (River Basin)",
+        geomorphic_setting: "Broad alluvial river terrace and commercial hub on the Teesta riverbank. Flat 7° slope.",
+        elevation_m: 350,
+        dem_crest_elevation_m: 362,
+        dem_toe_elevation_m: 350,
+        dem_horizontal_run_m: 200,
+        dem_delta_z_m: 12,
         slope_deg: loc05_slope,
         rainfall_1h_mm: round(loc05_rain1h, 1),
         rainfall_24h_mm: round(loc05_rain24h, 1),
@@ -570,17 +714,24 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: loc05_sev,
         statusText: loc05_status,
         roadBlocked: loc05_blocked,
-        latitude: 27.1750,
-        longitude: 88.5180,
+        latitude: 27.2345,
+        longitude: 88.4972,
+        ...loc05_flood,
+        compound_probability_percent: 0.0,
+        compound_active: false,
+        compound_pathway: "NONE_RIVER_ONLY",
       },
       LOC06: {
         location_id: "LOC06",
-        name: "Gangtok-Nathula Pass Sector",
-        elevation_m: 3100,
-        dem_crest_elevation_m: 3260,
-        dem_toe_elevation_m: 3100,
-        dem_horizontal_run_m: 165,
-        dem_delta_z_m: 160,
+        name: "Rangpo Border River Delta Flat",
+        hazard_typology: "FLOOD_ONLY",
+        typology_label: "🌊 Flash Flood Only (River Basin)",
+        geomorphic_setting: "Low-lying southern river exit floodplain where Teesta exits Sikkim. Flat 6° plain.",
+        elevation_m: 300,
+        dem_crest_elevation_m: 310,
+        dem_toe_elevation_m: 300,
+        dem_horizontal_run_m: 200,
+        dem_delta_z_m: 10,
         slope_deg: loc06_slope,
         rainfall_1h_mm: round(loc06_rain1h, 1),
         rainfall_24h_mm: round(loc06_rain24h, 1),
@@ -592,8 +743,12 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
         severity_band: loc06_sev,
         statusText: loc06_status,
         roadBlocked: loc06_blocked,
-        latitude: 27.3750,
-        longitude: 88.6550,
+        latitude: 27.1739,
+        longitude: 88.5180,
+        ...loc06_flood,
+        compound_probability_percent: 0.0,
+        compound_active: false,
+        compound_pathway: "NONE_RIVER_ONLY",
       },
       ...evaluatedCustom,
     },

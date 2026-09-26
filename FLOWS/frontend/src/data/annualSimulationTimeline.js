@@ -205,6 +205,16 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc01_state = loc01_fos >= 1.3 ? "STABLE" : "MARGINAL";
     loc01_status = loc01_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Post-Slide Debris Removal";
     loc01_blocked = false;
+  } else if (day >= 77 && day <= 80) {
+    // MULTI-REGION MONSOON DELUGE: Upstream basin downpour synchronized with Dikchu gorge breach & Dzongu
+    loc01_rain1h = 24.0;
+    loc01_rain24h = 145.0;
+    loc01_sat = 0.76;
+    loc01_fos = 1.16;
+    loc01_prob = 56.0;
+    loc01_sev = "MODERATE";
+    loc01_state = "MARGINAL";
+    loc01_status = "⛈️ Multi-Basin Deluge (Synchronized with Dikchu & Dzongu)";
   }
 
   // -------------------------------------------------------------------------
@@ -221,7 +231,17 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc02_status = "Stable Valley Junction";
   let loc02_blocked = false;
 
-  if (day >= 68 && day <= 74) {
+  if (day >= 43 && day <= 46) {
+    // MULTI-REGION STORM FRONT: Simultaneous convective downpour with Chungthang & Dzongu
+    loc02_rain1h = 18.5;
+    loc02_rain24h = 118.0;
+    loc02_sat = 0.74;
+    loc02_fos = 1.18;
+    loc02_prob = 52.0;
+    loc02_sev = "MODERATE";
+    loc02_state = "MARGINAL";
+    loc02_status = "🌧️ Multi-Region Storm (Synchronized with Chungthang & Dzongu)";
+  } else if (day >= 68 && day <= 74) {
     loc02_rain1h = 14.0;
     loc02_rain24h = 110.0;
     loc02_sat = 0.72;
@@ -253,6 +273,16 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc02_state = loc02_fos >= 1.3 ? "STABLE" : "MARGINAL";
     loc02_status = loc02_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Flood Scour Repair";
     loc02_blocked = false;
+  } else if (day >= 100 && day <= 103) {
+    // MULTI-REGION RAIN: Mid-valley runoff convergence while Singtam and Rangpo flood
+    loc02_rain1h = 13.0;
+    loc02_rain24h = 82.0;
+    loc02_sat = 0.65;
+    loc02_fos = 1.28;
+    loc02_prob = 38.0;
+    loc02_sev = "MODERATE";
+    loc02_state = "MARGINAL";
+    loc02_status = "🌧️ Mid-Valley Runoff Convergence (Active Rain)";
   }
 
   // -------------------------------------------------------------------------
@@ -319,7 +349,17 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc04_status = "Stable Mountain Shoulder";
   let loc04_blocked = false;
 
-  if (day >= 53 && day <= 57) {
+  if (day >= 43 && day <= 46) {
+    // MULTI-REGION RAINFALL: Mountain escarpment rain during North Sikkim storm
+    loc04_rain1h = 15.0;
+    loc04_rain24h = 96.0;
+    loc04_sat = 0.70;
+    loc04_fos = 1.24;
+    loc04_prob = 44.0;
+    loc04_sev = "MODERATE";
+    loc04_state = "MARGINAL";
+    loc04_status = "🌧️ Regional High-Elevation Rain (Synchronized with Chungthang & Dikchu)";
+  } else if (day >= 53 && day <= 57) {
     loc04_rain1h = 11.0;
     loc04_rain24h = 82.0;
     loc04_sat = 0.65;
@@ -351,6 +391,16 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc04_state = loc04_fos >= 1.3 ? "STABLE" : "MARGINAL";
     loc04_status = loc04_fos >= 1.3 ? "✅ Recovered to Stable Equilibrium" : "Clearing Mountain Road";
     loc04_blocked = false;
+  } else if (day >= 77 && day <= 80) {
+    // MULTI-REGION RAINFALL: High mountain shoulder rainfall during Teesta deluge
+    loc04_rain1h = 18.0;
+    loc04_rain24h = 115.0;
+    loc04_sat = 0.72;
+    loc04_fos = 1.20;
+    loc04_prob = 48.0;
+    loc04_sev = "MODERATE";
+    loc04_state = "MARGINAL";
+    loc04_status = "🌧️ Regional Mountain Storm (Synchronized with Dikchu & Chungthang)";
   }
 
   // -------------------------------------------------------------------------
@@ -395,6 +445,13 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
     loc05_sev = "MINOR";
     loc05_status = "✅ River Waters Receding Back Within Banks";
     loc05_blocked = false;
+  } else if (day >= 118 && day <= 121) {
+    // MULTI-REGION RAINFALL: Twin lower Teesta storm front (Singtam + Rangpo)
+    loc05_rain1h = 22.0;
+    loc05_rain24h = 135.0;
+    loc05_sat = 0.74;
+    loc05_sev = "MODERATE";
+    loc05_status = "🌧️ Lower Basin Regional Storm (Synchronized with Rangpo)";
   }
 
   // -------------------------------------------------------------------------
@@ -412,7 +469,14 @@ export function getDailySimulationState(dayOfYear, customSites = {}) {
   let loc06_status = "Normal Basin Drainage";
   let loc06_blocked = false;
 
-  if (day >= 111 && day <= 115) {
+  if (day >= 100 && day <= 103) {
+    // MULTI-REGION RAINFALL: Twin lower Teesta storm front (Rangpo + Singtam)
+    loc06_rain1h = 24.0;
+    loc06_rain24h = 150.0;
+    loc06_sat = 0.76;
+    loc06_status = "🌊 Lower Teesta Convective Front (Synchronized with Singtam)";
+    loc06_sev = "MODERATE";
+  } else if (day >= 111 && day <= 115) {
     loc06_rain1h = 14.0;
     loc06_rain24h = 95.0;
     loc06_sat = 0.70;
