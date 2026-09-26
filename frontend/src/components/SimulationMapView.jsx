@@ -350,15 +350,28 @@ export default function SimulationMapView({
           />
         )}
 
-        {/* ═══ LIVE OSM TEESTA DRAINAGE SYSTEM (EXTENDED PAST RANGPO TO MELLI & TEESTA BAZAR) ═══ */}
+        {/* ═══ LIVE OSM TEESTA DRAINAGE SYSTEM (HYDRAULIC FLOW & CATCHMENT PROXIMITY GATED) ═══ */}
         {waterways.map((river) => {
           const nearSite = sites[river.nearLocationId];
-          const isSurging = nearSite?.river_stage_state === "OVERBANK_FLOODING" || nearSite?.river_stage_state === "CATASTROPHIC_SURGE";
-          const isWarning = nearSite?.river_stage_state === "BANKFULL_WARNING";
+          const distKm = river.minDistanceKm ?? 999;
+          const isImmediateCatchment = distKm <= 5.0;
+          const isDownstreamTeestaCorridor = !!river.isDownstreamTeesta;
+
+          // Hydrological flood evaluation:
+          // A river segment can ONLY surge or flood if:
+          // 1. It is directly within the immediate storm/flood catchment of an active surging site (distKm <= 5.0 km), OR
+          // 2. It is on the downstream Teesta conveyance corridor (carrying flood discharge downstream past Rangpo/Melli)
+          //    AND an upstream or adjacent Teesta station has active flood discharge.
+          // Separate tributaries > 5.0km away in other valleys NEVER surge from an isolated storm elsewhere!
+          const siteSurging = nearSite?.river_stage_state === "OVERBANK_FLOODING" || nearSite?.river_stage_state === "CATASTROPHIC_SURGE";
+          const siteWarning = nearSite?.river_stage_state === "BANKFULL_WARNING";
+
+          const isSurging = (isImmediateCatchment || isDownstreamTeestaCorridor) && siteSurging;
+          const isWarning = (isImmediateCatchment || isDownstreamTeestaCorridor) && siteWarning;
 
           const riverColor = isSurging ? "#dc2626" : isWarning ? "#ea580c" : "#0284c7";
-          const riverWeight = isSurging ? 7 : isWarning ? 5 : 3.5;
-          const riverDash = isSurging ? "10 6" : undefined;
+          const riverWeight = isSurging ? 5.5 : isWarning ? 4 : 2.5;
+          const riverDash = isSurging ? "8 5" : undefined;
 
           return (
             <Polyline
@@ -378,10 +391,10 @@ export default function SimulationMapView({
                     {isSurging ? "🚨 CATASTROPHIC FLOOD SURGE ACTIVE" : isWarning ? "⚠️ BANKFULL CONVEYANCE WARNING" : "🟢 NOMINAL BASEFLOW DISCHARGE"}
                   </span>
                   <div style={{ marginTop: 4, fontSize: 11.5, color: "#475569" }}>
-                    Q_peak: <strong>{nearSite?.peak_discharge_m3s || 28} m³/s</strong> · Inundation Depth: <strong>+{nearSite?.inundation_depth_m || 0.4}m</strong>
+                    Q_peak: <strong>{isSurging ? (nearSite?.peak_discharge_m3s || 48) : 18} m³/s</strong> · Inundation Depth: <strong>+{isSurging ? (nearSite?.inundation_depth_m || 1.2) : 0.2}m</strong>
                   </div>
                   <div style={{ fontSize: 10.5, color: "#64748b", marginTop: 3 }}>
-                    Mapped via OpenStreetMap Live Drainage Engine
+                    {isImmediateCatchment ? `Immediate Catchment (${distKm}km from ${nearSite?.name || "Station"})` : isDownstreamTeestaCorridor ? "Downstream Teesta Flood Conveyance Corridor" : `Tributary Basin (${distKm}km from ${nearSite?.name || "Station"})`}
                   </div>
                 </div>
               </Popup>

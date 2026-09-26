@@ -78,18 +78,38 @@ out geom;"""
                     name = el.get("tags", {}).get("name", "Teesta Drainage Reach")
                     points = [[round(node["lat"], 6), round(node["lon"], 6)] for node in geom]
                     
-                    lat0 = points[0][0]
-                    lon0 = points[0][1]
-                    if lat0 >= 27.65:
-                        near = "LOC04" if lon0 < 88.65 else "LOC03"
-                    elif lat0 >= 27.50:
-                        near = "LOC01"
-                    elif lat0 >= 27.35:
-                        near = "LOC02"
-                    elif lat0 >= 27.20:
-                        near = "LOC05"
-                    else:
-                        near = "LOC06"
+                    # Filter external Duars/North Bengal rivers outside Sikkim basin
+                    name_lower = name.lower()
+                    avg_lat = sum(p[0] for p in points) / len(points)
+                    avg_lon = sum(p[1] for p in points) / len(points)
+                    if any(ext in name_lower for ext in ['murti', 'neora', 'ni chu', 'nartang', 'dre chu', 'di chu']):
+                        continue
+                    if avg_lon > 88.70 and avg_lat < 27.18:
+                        continue
+                    if avg_lat < 27.02 and (avg_lon < 88.41 or avg_lon > 88.55):
+                        continue
+
+                    # Exact closest pilot location calculation
+                    PILOT_COORDS = {
+                        "LOC01": (27.604, 88.646),
+                        "LOC02": (27.399, 88.524),
+                        "LOC03": (27.690, 88.740),
+                        "LOC04": (27.720, 88.550),
+                        "LOC05": (27.2345, 88.4972),
+                        "LOC06": (27.1739, 88.5180),
+                    }
+                    min_d_m = float("inf")
+                    best_loc = "LOC01"
+                    for loc_id, (slat, slon) in PILOT_COORDS.items():
+                        for p in points:
+                            dp = (p[0] - slat) * 111320.0
+                            dl = (p[1] - slon) * 111320.0 * 0.888
+                            d = (dp * dp + dl * dl) ** 0.5
+                            if d < min_d_m:
+                                min_d_m = d
+                                best_loc = loc_id
+
+                    is_downstream_teesta = (avg_lat < 27.18 and 88.42 <= avg_lon <= 88.54)
 
                     osm_id = el.get("id", idx)
                     rid = f"osm-river-{osm_id}"
@@ -101,7 +121,9 @@ out geom;"""
                         "id": rid,
                         "name": name,
                         "points": points,
-                        "nearLocationId": near,
+                        "nearLocationId": best_loc,
+                        "minDistanceKm": round(min_d_m / 1000.0, 2),
+                        "isDownstreamTeesta": is_downstream_teesta,
                         "osm_id": osm_id,
                         "category": "Live OpenStreetMap Waterway",
                     })
