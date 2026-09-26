@@ -306,50 +306,47 @@ Bhu-Rakshak_Complete_System/
 
 ---
 
-## 7. Quick Start Guide
+## 7. Quick Start Guide (Instant Turnkey Launch)
 
-### 7.1 One-Click Launchers (Recommended)
+The repository comes with pre-compiled production frontend distributions committed. **No Node.js or npm installation is required** to run and inspect the full system immediately.
 
-- **Windows**: Double-click `Start_Bhu-Rakshak.bat`.
-- **macOS / Linux**: Double-click `Start_Bhu-Rakshak.command`. (First run: `chmod +x Start_Bhu-Rakshak.command`).
-
-*The launcher automatically verifies dependencies, starts the FastAPI server on port 8731, and launches your browser to `http://127.0.0.1:8731`.*
+### 7.1 Instant One-Click Launch (Windows)
+- **FLOWS Multi-Hazard Dashboard (Recommended)**: Double-click **`START_FLOWS.bat`** or run **`python run.py`**.
+  - Automatically initializes physics & ML models, mounts the pre-built interactive UI, starts the server on `http://localhost:8000`, and opens your default browser.
+- **Bhu-Rakshak 3D Console**: Double-click **`Start_Bhu-Rakshak.bat`** (launches at `http://127.0.0.1:8731`).
+- **macOS / Linux**: Run `./Start_Bhu-Rakshak.command` or `python run.py`.
 
 ---
 
-### 7.2 Manual Installation & Startup
+### 7.2 Cross-Platform Manual Startup (Windows, macOS, Linux)
 
-#### 1. Clone & Set Up Python Virtual Environment
+#### 1. Clone Repository
 ```bash
-git clone https://github.com/aritra15-06/Bhu-Rakshak.git
-cd Bhu-Rakshak
-
-python3 -m venv venv
-# On Windows:
-.\venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
+git clone https://github.com/aritra15-06/Bhu-Rakshak-FLOWS.git
+cd Bhu-Rakshak-FLOWS
 ```
 
 #### 2. Install Python Dependencies
 ```bash
-pip install --force-reinstall --no-deps fastapi==0.110.0 starlette==0.36.3 "uvicorn[standard]==0.29.0"
 pip install -r requirements.txt
 ```
 
-#### 3. Build the React Frontend
+#### 3. Launch the System
 ```bash
-cd frontend
-npm install
-npm run build
-cd ..
+python run.py
 ```
+*Your browser will automatically open **`http://localhost:8000`**. You will see the exact same interface, maps, simulation timeline, live OSM river drainage, dynamic emergency directives, and physics telemetry as running in development.*
 
-#### 4. Launch the Server
+---
+
+### 7.3 Frontend Development (Optional — For Source Editing)
+If you wish to modify the React frontend source code and rebuild:
 ```bash
-python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8731
+cd FLOWS/frontend
+npm install
+npm run dev     # Starts Vite development server at http://localhost:5173
+npm run build   # Recompiles production bundle into FLOWS/frontend/dist
 ```
-Open **`http://127.0.0.1:8731`** in any modern web browser.
 
 ---
 

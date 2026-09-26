@@ -31,7 +31,11 @@ venv.bak/
 
 # Node / Frontend
 node_modules/
-dist/
+# Keep pre-built production frontend distributions committed for turnkey one-click launch
+!FLOWS/frontend/dist/
+!FLOWS/frontend/dist/**
+!frontend/dist/
+!frontend/dist/**
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
