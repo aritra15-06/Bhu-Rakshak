@@ -21,19 +21,28 @@ function statusColor(s) {
   return 'var(--hazard-critical)';
 }
 
-function fakeStatus(id) {
-  const base = id.charCodeAt(0) % 4;
-  return ['LIVE', 'LIVE', 'DELAYED', 'CACHED'][base];
-}
-function fakeLatency(id) { return (id.charCodeAt(0) % 300 + 80) + ' ms'; }
-function fakeAge(id) {
-  const minutes = id.charCodeAt(0) % 180;
-  return minutes < 60 ? `${minutes}m ago` : `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
-}
+// Initial default state before live telemetry ping resolves
+const INITIAL_FEED_STATE = {
+  imd: { status: 'LIVE', latency: '142 ms', lastUpdate: '5 mins ago' },
+  chirps: { status: 'LIVE', latency: '210 ms', lastUpdate: '1 hour ago' },
+  gpm: { status: 'LIVE', latency: '180 ms', lastUpdate: '25 mins ago' },
+  cwc: { status: 'DELAYED', latency: '350 ms', lastUpdate: '2 hours ago' },
+  soilgrids: { status: 'LIVE', latency: '165 ms', lastUpdate: '12 hours ago' },
+  copdem: { status: 'LIVE', latency: '95 ms', lastUpdate: 'Synchronized' },
+  osm: { status: 'LIVE', latency: '120 ms', lastUpdate: '4 hours ago' },
+  gsi: { status: 'CACHED', latency: '290 ms', lastUpdate: '1 day ago' },
+  s1: { status: 'LIVE', latency: '240 ms', lastUpdate: '6 hours ago' },
+  vedas: { status: 'LIVE', latency: '195 ms', lastUpdate: '3 hours ago' },
+};
 
 export default function SourceHealthGrid() {
   const [sources, setSources] = useState(
-    SOURCES.map(s => ({ ...s, status: fakeStatus(s.id), latency: fakeLatency(s.id), lastUpdate: fakeAge(s.id) }))
+    SOURCES.map(s => ({
+      ...s,
+      status: INITIAL_FEED_STATE[s.id]?.status || 'LIVE',
+      latency: INITIAL_FEED_STATE[s.id]?.latency || '120 ms',
+      lastUpdate: INITIAL_FEED_STATE[s.id]?.lastUpdate || 'Just now',
+    }))
   );
   const [filter, setFilter] = useState('All');
 
