@@ -1,58 +1,106 @@
-import { useSiteState } from "../state/SiteStateContext";
+import React, { useEffect, useState } from 'react';
+import { apiClient } from '../api/client';
+import { pilotLocations } from '../data/pilotLocations';
+import { useAppContext } from '../state/AppContext';
+import { useSimulationContext } from '../state/SimulationContext';
 
-export function SiteList() {
-  const { sites, selectedSite, setSelectedSite, loading } = useSiteState();
+function probColor(p) {
+  if (p >= 0.8) return 'var(--hazard-critical)';
+  if (p >= 0.6) return 'var(--hazard-warning)';
+  if (p >= 0.3) return 'var(--hazard-watch)';
+  return 'var(--hazard-safe)';
+}
 
-  if (loading) {
-    return <div className="empty-state">Loading monitored sites…</div>;
-  }
+export default function SiteList() {
+  const { selectedLocation, setSelectedLocation } = useAppContext();
+  const { lastPrediction } = useSimulationContext();
+  const [locations, setLocations] = useState(pilotLocations);
 
-  const entries = Object.entries(sites);
+  useEffect(() => {
+    apiClient.getLocations().then(data => {
+      if (data && data.length > 0) {
+        // merge API data with local fallback
+        setLocations(data.map(l => ({
+          ...l,
+          id: l.location_id || l.id,
+          lat: l.lat || l.latitude,
+          lng: l.lng || l.longitude,
+        })));
+      }
+    });
+  }, []);
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Monitored Stations ({entries.length})</h2>
+    <div className="sidebar site-list">
+      <div className="sidebar-header">
+        <span className="sidebar-title">🗺 Monitoring Sites</span>
+        <span className="site-count">{locations.length} sites</span>
       </div>
-
-      {entries.map(([locationId, data]) => {
-        const stability = data?.prediction?.physics_output?.stability_state || "UNKNOWN";
-        const sevBand = data?.severity?.severity_band || "MINOR";
-        const name = data?.current_params?.name || locationId;
-        const fos = data?.prediction?.physics_output?.factor_of_safety;
-        const spatial = data?.spatial_context || {};
-        const road = spatial.nearest_road?.name || spatial.primary_road_corridor || "Corridor";
-        const nearestTown = spatial.nearest_town;
-        const isSelected = selectedSite === locationId;
-
-        let dotClass = "STABLE";
-        if (sevBand === "CATASTROPHIC_POTENTIAL" || stability === "UNSTABLE" || (fos != null && fos < 1.0)) {
-          dotClass = "UNSTABLE";
-        } else if (sevBand === "MODERATE" || stability === "MARGINAL" || (fos != null && fos < 1.3)) {
-          dotClass = "MARGINAL";
-        }
-
-        return (
-          <div
-            key={locationId}
-            className={`site-card ${isSelected ? "selected" : ""}`}
-            onClick={() => setSelectedSite(locationId)}
-          >
-            <span className={`site-dot ${dotClass}`} />
-            <div className="site-card-text" style={{ flex: 1 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="site-card-name">{name}</span>
-                <span className={`site-list-sev-badge ${sevBand.toLowerCase()}`}>
-                  {sevBand === "CATASTROPHIC_POTENTIAL" ? "CRIT" : sevBand}
+      <div className="list-container">
+        {locations.map(loc => {
+          const locId = loc.location_id || loc.id;
+          const pred = lastPrediction[locId];
+          const lsP = pred?.prediction?.hazards?.landslide?.probability || 0;
+          const flP = pred?.prediction?.hazards?.flood?.probability || 0;
+          const maxP = Math.max(lsP, flP);
+          const rawAction = pred?.action?.action;
+          const action = (rawAction === 'EMERGENCY' || maxP >= 0.8)
+            ? 'EMERGENCY'
+            : (rawAction === 'WARNING' || maxP >= 0.6)
+            ? 'WARNING'
+            : (rawAction === 'WATCH' || maxP >= 0.3)
+            ? 'WATCH'
+            : 'SAFE';
+          const fosState = pred?.prediction?.physics_output?.stability_state || 'STABLE';
+          return (
+            <div
+              key={locId}
+              className={`site-card ${(selectedLocation?.location_id || selectedLocation?.id) === locId ? 'active' : ''}`}
+              onClick={() => setSelectedLocation(loc)}
+            >
+              <div className="site-card-top">
+                <div className="site-dot" style={{ background: probColor(maxP) }} />
+                <span className="site-name">{loc.name}</span>
+                <span className="site-action" style={{
+                  color: action === 'EMERGENCY' ? 'var(--hazard-critical)' : action === 'WARNING' ? 'var(--hazard-warning)' : action === 'WATCH' ? 'var(--hazard-watch)' : 'var(--hazard-safe)',
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.3px',
+                }}>
+                  {action}
                 </span>
               </div>
-              <span className="site-card-sub">
-                {locationId} · {road}{nearestTown ? ` (${nearestTown.name})` : ""} · FoS: <strong>{fos != null ? fos.toFixed(2) : "—"}</strong>
-              </span>
+              <div className="site-mini-bars">
+                <div className="mini-bar-row">
+                  <span className="mini-bar-label">LS</span>
+                  <div className="mini-bar-bg">
+                    <div className="mini-bar-fill" style={{ width: (lsP * 100) + '%', background: probColor(lsP) }} />
+                  </div>
+                  <span className="mini-bar-pct">{(lsP * 100).toFixed(0)}%</span>
+                </div>
+                <div className="mini-bar-row">
+                  <span className="mini-bar-label">FL</span>
+                  <div className="mini-bar-bg">
+                    <div className="mini-bar-fill" style={{ width: (flP * 100) + '%', background: 'var(--flood-primary)' }} />
+                  </div>
+                  <span className="mini-bar-pct">{(flP * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+              {fosState !== 'STABLE' && (
+                <div className="site-fos-warn">{fosState}</div>
+              )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      <div className="sidebar-footer">
+        <div className="legend-row"><span className="legend-dot" style={{ background: 'var(--hazard-safe)' }} /> Safe</div>
+        <div className="legend-row"><span className="legend-dot" style={{ background: 'var(--hazard-watch)' }} /> Watch</div>
+        <div className="legend-row"><span className="legend-dot" style={{ background: 'var(--hazard-warning)' }} /> Warning</div>
+        <div className="legend-row"><span className="legend-dot" style={{ background: 'var(--hazard-critical)' }} /> Emergency</div>
+      </div>
     </div>
   );
 }
+
+export { SiteList };
