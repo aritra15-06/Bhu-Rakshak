@@ -1,398 +1,333 @@
-import { useState, useRef, useEffect } from "react";
-import { useSiteState } from "../state/SiteStateContext";
-import { api } from "../api/client";
+import React, { useEffect, useState } from 'react';
+import { useAppContext } from '../state/AppContext';
+import { useSimulationContext } from '../state/SimulationContext';
+import RiskGauge from './RiskGauge';
+import CompoundPathway from './CompoundPathway';
+import FloodPanel from './FloodPanel';
+import ErrorBoundary from './ErrorBoundary';
+import { apiClient } from '../api/client';
 
-const PRESETS = {
-  dry: { label: "Dry Baseline", overrides: { rainfall_1h_mm: 0.0, rainfall_24h_mm: 1, initial_saturation_0_1: 0.15 } },
-  monsoon: { label: "Monsoon Surge", overrides: { rainfall_1h_mm: 8, rainfall_24h_mm: 80, initial_saturation_0_1: 0.55 } },
-  extreme: { label: "Extreme Cloudburst", overrides: { rainfall_1h_mm: 35, rainfall_24h_mm: 240, initial_saturation_0_1: 0.85 } },
-};
-
-const SLIDERS = [
-  { key: "rainfall_1h_mm", label: "Rainfall (1h)", min: 0, max: 40, step: 0.5, unit: "mm/h" },
-  { key: "rainfall_24h_mm", label: "Rainfall (24h)", min: 0, max: 300, step: 2, unit: "mm" },
-  { key: "initial_saturation_0_1", label: "Antecedent saturation", min: 0, max: 1, step: 0.01, unit: "" },
-  { key: "slope_deg", label: "Slope angle", min: 5, max: 65, step: 1, unit: "°" },
-  { key: "cohesion_kpa", label: "Soil cohesion", min: 0, max: 30, step: 0.5, unit: "kPa" },
-];
+function safeNum(val, fallback = 0) {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 export function SitePanel() {
-  const { sites, selectedSite, applyOverrides, resetSite, setToastAlert } = useSiteState();
-  const [pendingBySite, setPendingBySite] = useState({});
-  const [applying, setApplying] = useState(false);
-  const [dispatching, setDispatching] = useState(false);
-  const debounceTimerRef = useRef(null);
+  const { selectedLocation } = useAppContext();
+  const { lastPrediction } = useSimulationContext();
+  const [impact, setImpact] = useState(null);
+  const [section, setSection] = useState('risk'); // 'risk' | 'flood' | 'impact'
+  const [isCouplingModalOpen, setIsCouplingModalOpen] = useState(false);
+  const [autoPoppedLocId, setAutoPoppedLocId] = useState(null);
 
-  // Clean up any pending timer on unmount
+  const locId = selectedLocation?.location_id || selectedLocation?.id;
+  const lat = safeNum(selectedLocation?.lat ?? selectedLocation?.latitude, 27.5);
+  const lng = safeNum(selectedLocation?.lng ?? selectedLocation?.lon ?? selectedLocation?.longitude, 88.6);
+
   useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, []);
-
-  if (!selectedSite) {
-    return <div className="empty-state">Select a monitored station from the map or left list.</div>;
-  }
-
-  const data = sites[selectedSite];
-  if (!data) {
-    return <div className="empty-state">Loading station data…</div>;
-  }
-
-  const params = data.current_params || {};
-  const prediction = data.prediction || {};
-  const physics = prediction.physics_output || {};
-  const ml = prediction.ml_output || {};
-  const confidence = data.confidence || {};
-  const severity = data.severity || {};
-  const contributions = prediction.optional_explainability?.feature_contributions || [];
-  const pendingOverrides = pendingBySite[selectedSite] || {};
-
-  function currentValue(key) {
-    if (pendingOverrides[key] !== undefined) return pendingOverrides[key];
-    if (params[key] !== undefined) return params[key];
-    const defaults = { rainfall_1h_mm: 2.0, rainfall_24h_mm: 20.0 };
-    return defaults[key] ?? 0;
-  }
-
-  function handleSlider(key, value) {
-    const val = parseFloat(value);
-    const currentOverrides = pendingBySite[selectedSite] || {};
-    const nextOverrides = {
-      ...currentOverrides,
-      [key]: val,
-    };
-
-    // 1. Instantly update local state so the slider thumb and value badge update at 60fps
-    setPendingBySite((prev) => ({
-      ...prev,
-      [selectedSite]: nextOverrides,
-    }));
-
-    // 2. Debounced live prediction directly to backend physics & ML models without needing to click Apply
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+    if (locId) {
+      apiClient.getImpact(locId, lat, lng).then(setImpact).catch(() => {});
     }
+  }, [locId, lat, lng]);
 
-    debounceTimerRef.current = setTimeout(async () => {
-      setApplying(true);
-      try {
-        await applyOverrides(selectedSite, nextOverrides);
-      } catch (err) {
-        console.error("Live predict failed:", err);
-      } finally {
-        setApplying(false);
-      }
-    }, 60);
-  }
+  const pred = lastPrediction?.[locId];
+  const physOut = pred?.prediction?.physics_output || {};
+  const cp = pred?.prediction?.hazards?.compound || {};
+  const elevation = selectedLocation?.elevation_m || selectedLocation?.elevation;
+  const road = selectedLocation?.primary_road;
 
-  async function handlePresetClick(presetOverrides) {
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    setPendingBySite((prev) => ({
-      ...prev,
-      [selectedSite]: { ...presetOverrides },
-    }));
-    setApplying(true);
-    try {
-      await applyOverrides(selectedSite, presetOverrides);
-    } catch (err) {
-      console.error("Failed to apply preset:", err);
-    } finally {
-      setApplying(false);
+  // Auto-trigger Coupling Active Pop-up Menu when severe compound threat is active
+  const hasCoupling = (cp.activated_pathways && cp.activated_pathways.length > 0) || selectedLocation?.compound_active;
+  useEffect(() => {
+    if (hasCoupling && autoPoppedLocId !== locId) {
+      setIsCouplingModalOpen(true);
+      setAutoPoppedLocId(locId);
     }
+  }, [hasCoupling, locId, autoPoppedLocId]);
+
+  if (!selectedLocation) {
+    return (
+      <div className="right-panel empty-panel">
+        <div className="empty-icon">📍</div>
+        <p>Select a monitoring site to view details</p>
+      </div>
+    );
   }
-
-  async function applyChanges(overridesToApply) {
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    setApplying(true);
-    try {
-      await applyOverrides(selectedSite, overridesToApply);
-    } finally {
-      setApplying(false);
-    }
-  }
-
-  async function handleReset() {
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    setApplying(true);
-    try {
-      await resetSite(selectedSite);
-      setPendingBySite((prev) => {
-        const next = { ...prev };
-        delete next[selectedSite];
-        return next;
-      });
-    } catch (err) {
-      console.error("Failed to reset site:", err);
-    } finally {
-      setApplying(false);
-    }
-  }
-
-  const spatial = data.spatial_context || {};
-  const nearestRoad = spatial.nearest_road;
-  const nearestTown = spatial.nearest_town;
-  const nearbyTowns = spatial.nearby_towns || [];
-  const roadCorridor = spatial.primary_road_corridor || nearestRoad?.name || params.name || "Transit Corridor";
-
-  async function handleDispatchAlert() {
-    setDispatching(true);
-    try {
-      const res = await api.sendAlerts(selectedSite, true);
-      const road = roadCorridor;
-      setToastAlert({
-        type: res.action === "EVACUATE" ? "danger" : "warning",
-        title: `🚨 Emergency Alert: ${params.name || selectedSite}`,
-        message: `Action: ${res.action} · Dispatched to ${res.recipients?.length || 0} citizens & observers along ${road}.`,
-        evac_towns: res.recipients?.filter((r) => r.tier === "EVACUATE_NOW").map((r) => r.town) || [],
-        blocked_roads: [road],
-        detour_towns: res.recipients?.filter((r) => r.tier.includes("DETOUR")).map((r) => r.town) || [],
-      });
-    } catch (e) {
-      console.error("Alert failed", e);
-    } finally {
-      setDispatching(false);
-    }
-  }
-
-  const fos = physics.factor_of_safety;
-  const probPercent = ml.calibrated_probability != null ? (ml.calibrated_probability * 100).toFixed(1) : "—";
-  const probNum = ml.calibrated_probability != null ? ml.calibrated_probability * 100 : 0;
-  const confPercent = confidence.confidence_0_1 != null ? Math.round(confidence.confidence_0_1 * 100) : 80;
-  const sevScore = severity.severity_score_0_100 ?? 0;
-
-  // Determine Severity Color Class & Warning Text
-  let severityClass = "severity-minor";
-  let hazardBadge = "🟢 Low Hazard";
-  let dangerTitle = "Minimal / Low Landslide Threat";
-  let dangerSubtext = "Minor superficial wash only.";
-  let impactDescription =
-    "Geotechnical forces are in balance. If local failure occurs, it will be a small, superficial slope slump with minimal danger and low velocity.";
-
-  if (severity.severity_band === "CATASTROPHIC_POTENTIAL" || sevScore >= 75 || (fos != null && fos < 0.9 && probNum > 75)) {
-    severityClass = "severity-critical";
-    hazardBadge = "🚨 Critical Danger";
-    dangerTitle = "VERY DANGEROUS LANDSLIDE IMMINENT";
-    dangerSubtext = "Major deep-seated mass movement & rapid avalanche.";
-    impactDescription =
-      "High probability of a large-scale, very dangerous landslide. Destructive kinetic mass movement, road collapse, and total corridor severance expected.";
-  } else if (severity.severity_band === "MAJOR" || sevScore >= 50 || (fos != null && fos < 1.0)) {
-    severityClass = "severity-major";
-    hazardBadge = "🟠 Major Warning";
-    dangerTitle = "Major Dangerous Landslide Expected";
-    dangerSubtext = "High-volume slope failure with heavy debris runout.";
-    impactDescription =
-      "Driving gravitational forces exceed shear resistance (FoS < 1.0). High risk of deep slip surface failure, road burial, and severe infrastructure damage.";
-  } else if (severity.severity_band === "MODERATE" || sevScore >= 25 || (fos != null && fos < 1.3)) {
-    severityClass = "severity-moderate";
-    hazardBadge = "🟡 Moderate Warning";
-    dangerTitle = "Small / Localized Landslide Likely";
-    dangerSubtext = "Surface slumping, loose rockfall, and shoulder spillage.";
-    impactDescription =
-      "Antecedent saturation is reducing soil cohesion. Smaller slope failure or roadside embankment slumping expected with moderate transit disruption.";
-  }
-
-  const stabilityLower = (physics.stability_state || "unknown").toLowerCase();
-  const confLower = (confidence.confidence_band || "moderate").toLowerCase();
-  const confReasonText =
-    confidence.reasons && confidence.reasons.length > 0
-      ? confidence.reasons[0]
-      : "Data quality checks verified; physics limit-equilibrium calculations align with ML gradient booster predictions.";
 
   return (
-    <div className="panel-inner-scroll">
-      {/* Site Header */}
-      <div className="panel-section" style={{ paddingBottom: 14, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>{params.name}</h3>
-            <span style={{ fontSize: 12, color: "var(--ink-muted)", fontWeight: 500 }}>
-              {selectedSite} · Station Geotechnical Analysis
-            </span>
-          </div>
-        </div>
-
-        <div className="metric-row" style={{ marginTop: 8 }}>
-          <span className="metric-label">Coordinates</span>
-          <span className="metric-value">
-            {params.latitude?.toFixed(4)}°N, {params.longitude?.toFixed(4)}°E (Elev. {params.elevation_m}m)
-          </span>
-        </div>
-        <div className="metric-row">
-          <span className="metric-label">Status Timestamp</span>
-          <span className="metric-value" style={{ color: "#166534", fontWeight: 600 }}>
-            {data.last_updated || "Just now"}
-          </span>
-        </div>
-      </div>
-
-      {/* Minimal Highlighted Details Card with Dynamic Severity Colors */}
-      <div className={`prediction-window ${severityClass}`} style={{ marginBottom: 20 }}>
-        <div className="pred-window-header">
-          <div className="pred-badge-status">
-            <span className="pred-pulse-dot" />
-            <span>{hazardBadge}</span>
-          </div>
-          <span className="pred-site-tag">{selectedSite} · Evaluation</span>
-        </div>
-
-        <div className="pred-danger-headline">
-          <h4>{dangerTitle}</h4>
-          <p>{impactDescription}</p>
-        </div>
-
-        <div className="pred-metrics-grid">
-          {/* Stability & FoS */}
-          <div className="pred-metric-card">
-            <span className="pred-card-label">Slope Stability</span>
-            <span className={`pred-stability-pill ${stabilityLower}`}>
-              {physics.stability_state || "STABLE"}
-            </span>
-            <span className="pred-card-sub">
-              Factor of Safety: <strong>{fos != null ? fos.toFixed(2) : "—"}</strong>
-            </span>
-          </div>
-
-          {/* Landslide Probability */}
-          <div className="pred-metric-card">
-            <span className="pred-card-label">Landslide Probability</span>
-            <span className="pred-prob-val">{probPercent}%</span>
-            <div className="pred-prob-track">
-              <div className="pred-prob-fill" style={{ width: `${Math.min(100, Math.max(2, probNum))}%` }} />
-            </div>
-            <span className="pred-card-sub">{probNum > 50 ? "High Likelihood" : "Low / Moderate"}</span>
-          </div>
-
-          {/* Severity Classification */}
-          <div className="pred-metric-card">
-            <span className="pred-card-label">Landslide Severity</span>
-            <span className="pred-severity-val">
-              {severity.severity_band || "MINOR"} ({sevScore}/100)
-            </span>
-            <span className="pred-card-sub">{dangerSubtext}</span>
-          </div>
-
-          {/* Confidence Level */}
-          <div className="pred-metric-card">
-            <span className="pred-card-label">Model Confidence</span>
-            <span className={`pred-conf-pill ${confLower}`}>
-              {confidence.confidence_band || "MODERATE"} ({confPercent}%)
-            </span>
-            <span className="pred-card-sub">Evidence Quality: High</span>
-          </div>
-        </div>
-
-        {/* Confidence Explanation Reason */}
-        <div className="pred-confidence-detail">
-          <span className="pred-detail-icon">🔬</span>
-          <span>
-            <strong>Confidence Assessment:</strong> {confReasonText}
-          </span>
-        </div>
-      </div>
-
-      {/* Sliding Adjustment Toggles Section */}
-      <div className="panel-section">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 14.5 }}>Geotechnical &amp; Rainfall Sliders</h3>
-          <span style={{ fontSize: 11.5, color: applying ? "#d97706" : "#16a34a", fontWeight: 700 }}>
-            {applying ? "⚡ Recalculating live…" : "⚡ Live Dynamic Prediction"}
-          </span>
-        </div>
-
-        {/* Quick Presets */}
-        <div className="preset-row" style={{ marginBottom: 14 }}>
-          {Object.entries(PRESETS).map(([key, preset]) => (
-            <button
-              key={key}
-              className="preset-btn"
-              disabled={applying}
-              onClick={() => handlePresetClick(preset.overrides)}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Interactive Sliders */}
-        {SLIDERS.map((s) => (
-          <div className="slider-group" key={s.key} style={{ marginBottom: 14 }}>
-            <div className="slider-label">
-              <span style={{ fontWeight: 500 }}>{s.label}</span>
-              <span className="value">
-                {currentValue(s.key)?.toFixed?.(s.step < 1 ? 2 : 1) ?? currentValue(s.key)} {s.unit}
+    <div className="right-panel">
+      {/* Site header */}
+      <div className="site-header">
+        <div className="site-header-info">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h2 className="site-heading" style={{ margin: 0 }}>{selectedLocation.name || locId}</h2>
+            {selectedLocation.hazard_typology && (
+              <span style={{
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: selectedLocation.hazard_typology === 'COMPOUND' ? '#f3e8ff' : selectedLocation.hazard_typology === 'LANDSLIDE_ONLY' ? '#fef3c7' : '#e0f2fe',
+                color: selectedLocation.hazard_typology === 'COMPOUND' ? '#7e22ce' : selectedLocation.hazard_typology === 'LANDSLIDE_ONLY' ? '#b45309' : '#0369a1',
+                border: `1px solid ${selectedLocation.hazard_typology === 'COMPOUND' ? '#d8b4fe' : selectedLocation.hazard_typology === 'LANDSLIDE_ONLY' ? '#fcd34d' : '#bae6fd'}`
+              }}>
+                {selectedLocation.hazard_typology === 'COMPOUND' ? '🔮 Compound Gorge' : selectedLocation.hazard_typology === 'LANDSLIDE_ONLY' ? '🏔️ Alpine Ridge Cut' : '🌊 Valley Basin Flat'}
               </span>
-            </div>
-            <input
-              type="range"
-              min={s.min}
-              max={s.max}
-              step={s.step}
-              value={currentValue(s.key) ?? s.min}
-              onChange={(e) => handleSlider(s.key, e.target.value)}
-            />
+            )}
+            {hasCoupling && (
+              <button
+                onClick={() => setIsCouplingModalOpen(true)}
+                style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: '#7e22ce',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  boxShadow: '0 1px 3px rgba(126, 34, 206, 0.35)'
+                }}
+                title="Click to view detailed Cascade Coupling Modal"
+              >
+                <span>⚡ Coupling Active</span>
+              </button>
+            )}
           </div>
-        ))}
-
-        <div className="btn-row" style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: applying ? "#d97706" : "#16a34a", fontWeight: 600 }}>
-            <span
-              style={{
-                display: "inline-block",
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: applying ? "#d97706" : "#16a34a",
-                boxShadow: applying ? "0 0 6px #d97706" : "0 0 6px #16a34a",
-                transition: "all 0.2s ease",
-              }}
-            />
-            <span>{applying ? "Calculating live prediction…" : "Live Auto-Prediction Active"}</span>
+          <div className="site-meta" style={{ marginTop: 4 }}>
+            <span>📍 {lat.toFixed(3)}°N, {lng.toFixed(3)}°E</span>
+            {elevation && <span> · ⛰ {elevation}m</span>}
+            {road && <span> · 🛣 {road}</span>}
           </div>
-
-          <button
-            className="btn btn-sm btn-outline"
-            disabled={applying}
-            onClick={handleReset}
-            title="Reset site parameters back to original baseline"
-          >
-            🔄 Reset to baseline
-          </button>
+        </div>
+        <div className="site-fos-pill" style={{
+          background: physOut.stability_state === 'UNSTABLE' ? '#fee2e2' : physOut.stability_state === 'MARGINAL' ? '#fef3c7' : '#dcfce7',
+          color: physOut.stability_state === 'UNSTABLE' ? '#b91c1c' : physOut.stability_state === 'MARGINAL' ? '#b45309' : '#15803d',
+          border: `1px solid ${physOut.stability_state === 'UNSTABLE' ? '#fca5a5' : physOut.stability_state === 'MARGINAL' ? '#fcd34d' : '#86efac'}`,
+        }}>
+          FoS {Number.isFinite(Number(physOut.factor_of_safety)) ? Number(physOut.factor_of_safety).toFixed(2) : '–'}
+          <br /><span style={{ fontSize: '0.65rem' }}>{physOut.stability_state || '–'}</span>
         </div>
       </div>
 
-      {/* Feature Contributions / Explainability */}
-      {contributions.length > 0 && (
-        <div className="panel-section">
-          <h3 style={{ fontSize: 13.5, marginBottom: 8 }}>What's driving this prediction</h3>
-          <ul className="explain-list">
-            {contributions.map((c) => (
-              <li key={c.feature}>
-                <span>{c.feature.replace(/_/g, " ")}</span>
-                <span className={c.contribution >= 0 ? "contribution-pos" : "contribution-neg"}>
-                  {c.contribution >= 0 ? "+" : ""}
-                  {c.contribution.toFixed(3)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="caveat-note" style={{ marginTop: 8 }}>
-            Post-hoc SHAP attribution — shows what the model weighted, not a causal proof.
+      {/* Section tabs */}
+      <div className="panel-tabs">
+        {[['risk', '📊 Risk'], ['flood', '🌊 Flood'], ['impact', '🏘 Impact']].map(([k, l]) => (
+          <button key={k} className={`panel-tab ${section === k ? 'active' : ''}`} onClick={() => setSection(k)}>{l}</button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="panel-content">
+        <ErrorBoundary fallbackMessage="Error loading details for this tab.">
+          {section === 'risk' && <RiskGauge />}
+          {section === 'flood' && <FloodPanel pred={pred} />}
+          {section === 'impact' && <ImpactView impact={impact} stabilityState={physOut.stability_state} />}
+        </ErrorBoundary>
+      </div>
+
+      {/* Interactive Compound Coupling Modal & Trigger */}
+      {hasCoupling && (
+        <CompoundPathway
+          pathways={cp.activated_pathways || ["TOE_EROSION_PLANAR_SLIP"]}
+          summary={cp.summary || selectedLocation?.compound_pathway || "High pore pressure & toe erosion coupling active."}
+          siteName={selectedLocation.name || locId}
+          isOpen={isCouplingModalOpen}
+          onClose={() => setIsCouplingModalOpen(false)}
+          onOpen={() => setIsCouplingModalOpen(true)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImpactView({ impact, stabilityState }) {
+  if (!impact) return <div className="loading-text" style={{ padding: 16 }}>Loading geospatial impact telemetry…</div>;
+  const villages = impact.affected_villages || [];
+  const roads = impact.affected_roads || [];
+  const bridges = impact.affected_bridges || [];
+  const pop = impact.total_population_at_risk || 0;
+
+  return (
+    <div className="impact-view" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* KPI Stats Grid */}
+      <div className="impact-stat-row">
+        <div className="impact-stat">
+          <span className="impact-num" style={{ color: 'var(--hazard-critical)' }}>{pop.toLocaleString()}</span>
+          <span className="impact-lbl">Exposed Population</span>
+        </div>
+        <div className="impact-stat">
+          <span className="impact-num" style={{ color: 'var(--hazard-warning)' }}>{villages.length}</span>
+          <span className="impact-lbl">Settlements at Risk</span>
+        </div>
+        <div className="impact-stat">
+          <span className="impact-num" style={{ color: 'var(--flood-primary)' }}>{roads.length}</span>
+          <span className="impact-lbl">Access Corridors</span>
+        </div>
+        {bridges.length > 0 && (
+          <div className="impact-stat">
+            <span className="impact-num" style={{ color: '#8b5cf6' }}>{bridges.length}</span>
+            <span className="impact-lbl">River Bridges</span>
+          </div>
+        )}
+      </div>
+
+      {/* Affected Settlements Table */}
+      {villages.length > 0 && (
+        <div className="impact-table-section">
+          <div className="impact-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🏘️ Proximity Settlements & Evacuation Tiers</span>
+            <span style={{ fontSize: '0.68rem', color: '#64748b' }}>NDMA Action Priority</span>
+          </div>
+          <table className="impact-table">
+            <thead>
+              <tr>
+                <th>Village</th>
+                <th>Distance</th>
+                <th>Pop.</th>
+                <th>Action Directive</th>
+              </tr>
+            </thead>
+            <tbody>
+              {villages.map((v, i) => {
+                const tier = v.tier === 'EVACUATE_NOW' || stabilityState === 'UNSTABLE'
+                  ? 'EVACUATE_NOW'
+                  : v.tier === 'PREPARE'
+                  ? 'PREPARE'
+                  : 'WATCH';
+
+                const tierColor = tier === 'EVACUATE_NOW' ? '#dc2626' : tier === 'PREPARE' ? '#d97706' : '#0284c7';
+                const tierBg = tier === 'EVACUATE_NOW' ? '#fee2e2' : tier === 'PREPARE' ? '#fef3c7' : '#e0f2fe';
+                const tierText = tier === 'EVACUATE_NOW' ? '🚨 EVACUATE NOW' : tier === 'PREPARE' ? '⚠️ PREPARE' : '👁️ WATCH';
+
+                return (
+                  <tr key={i}>
+                    <td><strong>{v.name || '–'}</strong></td>
+                    <td>{v.distance_m != null ? `${(v.distance_m / 1000).toFixed(1)} km` : '–'}</td>
+                    <td>{v.population ? v.population.toLocaleString() : '–'}</td>
+                    <td>
+                      <span style={{
+                        color: tierColor,
+                        background: tierBg,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontSize: '0.66rem',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {tierText}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Roadway & Highway Status */}
+      {roads.length > 0 && (
+        <div className="impact-table-section">
+          <div className="impact-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🛣️ Transportation Corridors & Road Access</span>
+            <span style={{ fontSize: '0.68rem', color: '#64748b' }}>BRO / PWD Status</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            {roads.map((r, i) => {
+              const isBlocked = r.status === 'BLOCKED' || stabilityState === 'UNSTABLE';
+              const isRestricted = !isBlocked && r.status === 'RESTRICTED';
+              const statusColor = isBlocked ? '#dc2626' : isRestricted ? '#d97706' : '#16a34a';
+              const statusBg = isBlocked ? '#fee2e2' : isRestricted ? '#fef3c7' : '#dcfce7';
+              const statusLabel = isBlocked ? '🚨 BLOCKED / DEBRIS DAM' : isRestricted ? '⚠️ RESTRICTED ACCESS' : '✓ CAUTION / OPEN';
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    padding: '8px 10px',
+                    background: '#f8fafc',
+                    borderRadius: 6,
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.72rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <strong>{r.name || 'Unnamed Corridor'}</strong>
+                    <span style={{ color: '#64748b', fontSize: '0.68rem' }}>
+                      {r.distance_m != null ? `Proximity: ${(r.distance_m / 1000).toFixed(1)} km to hazard centroid` : 'Direct alignment'}
+                    </span>
+                  </div>
+                  <span style={{
+                    color: statusColor,
+                    background: statusBg,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {statusLabel}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Confidence assessment factors */}
-      <div className="panel-section" style={{ borderBottom: "none" }}>
-        <h3 style={{ fontSize: 13.5, marginBottom: 8 }}>Why this confidence</h3>
-        <ul className="explain-list">
-          {confidence.reasons && confidence.reasons.map((r, i) => (
-            <li key={i}>
-              <span>{r}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* Critical River Bridges */}
+      {bridges.length > 0 && (
+        <div className="impact-table-section">
+          <div className="impact-section-title">
+            <span>🌉 Critical River Infrastructure</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            {bridges.map((b, i) => {
+              const isRisk = b.status === 'IMMINENT_COLLAPSE' || b.status === 'SUBMERGENCE_RISK';
+              return (
+                <div
+                  key={i}
+                  style={{
+                    padding: '8px 10px',
+                    background: isRisk ? '#fdf2f8' : '#f8fafc',
+                    borderRadius: 6,
+                    border: `1px solid ${isRisk ? '#fbcfe8' : '#e2e8f0'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.72rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <strong>{b.name}</strong>
+                    <span style={{ color: '#64748b', fontSize: '0.68rem' }}>
+                      Distance: {(b.distance_m / 1000).toFixed(1)} km
+                    </span>
+                  </div>
+                  <span style={{
+                    color: isRisk ? '#be185d' : '#0369a1',
+                    background: isRisk ? '#fce7f3' : '#e0f2fe',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    fontWeight: 700,
+                    fontSize: '0.66rem'
+                  }}>
+                    {b.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default SitePanel;
